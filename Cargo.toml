@@ -1,0 +1,10 @@
+[package]
+name = "moparse"
+description = "Modelica language parser"
+authors = ["Eryk Mroczek <mroczek.eryk@gmail.com>"]
+version = "0.1.0"
+edition = "2021"
+license = "MPL-2.0"
+readme = "README.md"
+repository = "https://github.com/ErykMroczek/moparse"
+keywords = ["Modelica", "parsing"]
