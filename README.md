@@ -10,14 +10,6 @@ JSON format, so it could be consumable by anything.
 The parser is working more or less correctly, but it is very much work
 in progress, so every version may bring breaking changes.
 
-## Installation
-
-*moparse* is a Rust crate and can be installed with Cargo:
-
-```bash
-cargo install moparse
-```
-
 ## License
 
 MPL-2.0
