@@ -1,4 +1,4 @@
-use crate::events::{SyntaxEvent, Terminal};
+use crate::events::{Payload, SyntaxEvent, Terminal};
 use crate::syntax::SyntaxKind;
 use crate::tokens::{TokenCollection, TokenKind};
 
@@ -134,37 +134,46 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Return the vector position where the grammar rule starts
-    /// together with an index of the corresponding token. Push a new
-    /// `SyntaxEvent` into the vector.
+    /// Return the vector position where the grammar rule starts. Push a
+    /// new `SyntaxEvent` into the vector.
     ///
     /// Assume that rule is erroneous. It is updated during `exit()`.
-    fn enter(&mut self) -> (usize, usize) {
+    fn enter(&mut self) -> usize {
         let mark = self.events.len();
-        self.events.push(SyntaxEvent::Enter {
+        let p = Payload {
             typ: SyntaxKind::Error,
             tok: self.pos,
-            exit: self.events.len(),
-        });
-        (mark, self.pos)
+            pair: self.events.len(),
+        };
+        self.events.push(SyntaxEvent::Enter(p));
+        mark
     }
 
     /// Close the production scope and update its type
     ///
     /// * `m`: position of the corresponding enter event
-    /// * `tok`: index of the token that started the production
-    fn exit(&mut self, m: usize, tok: usize, typ: SyntaxKind) {
+    /// * `typ`: type of the production
+    fn exit(&mut self, m: usize, typ: SyntaxKind) {
         let mark = self.events.len();
-        self.events[m] = SyntaxEvent::Enter {
+        match &mut self.events[m] {
+            SyntaxEvent::Enter(ref mut p) => {
+                p.typ = typ;
+                p.pair = mark;
+            }
+            _ => unreachable!(),
+        }
+        let tok;
+        match self.events.last().unwrap() {
+            // Either this production was empty or no new token was consumed
+            // after the previous production was closed - reuse the token
+            SyntaxEvent::Enter(p) | SyntaxEvent::Exit(p) => tok = p.tok,
+            _ => tok = self.pos - 1,
+        }
+        self.events.push(SyntaxEvent::Exit(Payload {
             typ,
             tok,
-            exit: mark,
-        };
-        self.events.push(SyntaxEvent::Exit {
-            typ,
-            tok: self.pos - 1,
-            enter: m,
-        });
+            pair: m,
+        }));
     }
 
     /// Advance the parser, consume the token and push it into the events vector
@@ -210,13 +219,13 @@ impl<'a> Parser<'a> {
 
     /// Mark currently parsed token as erroneus.
     fn error(&mut self, msg: String) {
-        let (mark, pos) = self.enter();
+        let mark = self.enter();
         if !self.eof() {
             self.events
                 .push(SyntaxEvent::Advance(Terminal::Error { msg, tok: self.pos }));
             self.pos += 1;
         }
-        self.exit(mark, pos, SyntaxKind::Error);
+        self.exit(mark, SyntaxKind::Error);
     }
 
     /// Advance the parser if current token is expected. Report error if
@@ -262,7 +271,7 @@ const CLASS_PREFS: [TokenKind; 13] = [
 // A.2.1 Stored Definition – Within
 
 fn stored_definition(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     if p.consume(TokenKind::Within) {
         if !p.check(TokenKind::Semi) {
             name(p);
@@ -274,21 +283,21 @@ fn stored_definition(p: &mut Parser) {
         class_definition(p);
         p.expect(TokenKind::Semi);
     }
-    p.exit(mark, pos, SyntaxKind::StoredDefinition);
+    p.exit(mark, SyntaxKind::StoredDefinition);
 }
 
 // A.2.2 Class Definition
 
 fn class_definition(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     p.consume(TokenKind::Encapsulated);
     class_prefixes(p);
     class_specifier(p);
-    p.exit(mark, pos, SyntaxKind::ClassDefinition);
+    p.exit(mark, SyntaxKind::ClassDefinition);
 }
 
 fn class_prefixes(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     p.consume(TokenKind::Partial);
     let pref = p.nth(0);
     match pref {
@@ -322,11 +331,11 @@ fn class_prefixes(p: &mut Parser) {
             p.nth(0)
         )),
     }
-    p.exit(mark, pos, SyntaxKind::ClassPrefixes);
+    p.exit(mark, SyntaxKind::ClassPrefixes);
 }
 
 fn class_specifier(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     if p.check(TokenKind::Extends) {
         long_class_specifier(p);
     } else if p.check(TokenKind::Ident) {
@@ -343,11 +352,11 @@ fn class_specifier(p: &mut Parser) {
             p.nth(0)
         ));
     }
-    p.exit(mark, pos, SyntaxKind::ClassSpecifier);
+    p.exit(mark, SyntaxKind::ClassSpecifier);
 }
 
 fn long_class_specifier(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     if p.consume(TokenKind::Extends) {
         p.expect(TokenKind::Ident);
         if p.check(TokenKind::LParen) {
@@ -360,11 +369,11 @@ fn long_class_specifier(p: &mut Parser) {
     composition(p);
     p.expect(TokenKind::End);
     p.expect(TokenKind::Ident);
-    p.exit(mark, pos, SyntaxKind::LongClassSpecifier);
+    p.exit(mark, SyntaxKind::LongClassSpecifier);
 }
 
 fn short_class_specifier(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     p.expect(TokenKind::Ident);
     p.expect(TokenKind::Equal);
     if p.consume(TokenKind::Enumeration) {
@@ -384,11 +393,11 @@ fn short_class_specifier(p: &mut Parser) {
         }
     }
     description(p);
-    p.exit(mark, pos, SyntaxKind::ShortClassSpecifier);
+    p.exit(mark, SyntaxKind::ShortClassSpecifier);
 }
 
 fn der_class_specifier(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     p.expect(TokenKind::Ident);
     p.expect(TokenKind::Equal);
     p.expect(TokenKind::Der);
@@ -401,36 +410,36 @@ fn der_class_specifier(p: &mut Parser) {
         p.expect(TokenKind::Ident);
     }
     description(p);
-    p.exit(mark, pos, SyntaxKind::DerClassSpecifier);
+    p.exit(mark, SyntaxKind::DerClassSpecifier);
 }
 
 fn base_prefix(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     if !p.consume(TokenKind::Input) {
         p.consume(TokenKind::Output);
     }
-    p.exit(mark, pos, SyntaxKind::BasePrefix);
+    p.exit(mark, SyntaxKind::BasePrefix);
 }
 
 fn enum_list(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     enumeration_literal(p);
     while !p.check(TokenKind::RParen) && !p.eof() {
         p.expect(TokenKind::Comma);
         enumeration_literal(p);
     }
-    p.exit(mark, pos, SyntaxKind::EnumList);
+    p.exit(mark, SyntaxKind::EnumList);
 }
 
 fn enumeration_literal(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     p.expect(TokenKind::Ident);
     description(p);
-    p.exit(mark, pos, SyntaxKind::EnumerationLiteral);
+    p.exit(mark, SyntaxKind::EnumerationLiteral);
 }
 
 fn composition(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     element_list(p);
     while !p.check_any(&[TokenKind::External, TokenKind::Annotation, TokenKind::End]) && !p.eof() {
         let k = p.nth(0);
@@ -473,17 +482,17 @@ fn composition(p: &mut Parser) {
         annotation_clause(p);
         p.expect(TokenKind::Semi);
     }
-    p.exit(mark, pos, SyntaxKind::Composition);
+    p.exit(mark, SyntaxKind::Composition);
 }
 
 fn language_specification(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     p.expect(TokenKind::String);
-    p.exit(mark, pos, SyntaxKind::LanguageSpecification);
+    p.exit(mark, SyntaxKind::LanguageSpecification);
 }
 
 fn external_function_call(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     if p.nth(1) != TokenKind::LParen {
         component_reference(p);
         p.expect(TokenKind::Equal);
@@ -494,20 +503,20 @@ fn external_function_call(p: &mut Parser) {
         expression_list(p);
     }
     p.expect(TokenKind::RParen);
-    p.exit(mark, pos, SyntaxKind::ExternalFunctionCall);
+    p.exit(mark, SyntaxKind::ExternalFunctionCall);
 }
 
 fn element_list(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     while !p.check_any(&SECTION_BREAKERS) && !p.eof() {
         element(p);
         p.expect(TokenKind::Semi);
     }
-    p.exit(mark, pos, SyntaxKind::ElementList);
+    p.exit(mark, SyntaxKind::ElementList);
 }
 
 fn element(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     if p.check(TokenKind::Import) {
         import_clause(p);
     } else if p.check(TokenKind::Extends) {
@@ -533,11 +542,11 @@ fn element(p: &mut Parser) {
             component_clause(p);
         }
     }
-    p.exit(mark, pos, SyntaxKind::Element);
+    p.exit(mark, SyntaxKind::Element);
 }
 
 fn import_clause(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     p.expect(TokenKind::Import);
     if p.nth(1) == TokenKind::Equal {
         p.expect(TokenKind::Ident);
@@ -552,22 +561,22 @@ fn import_clause(p: &mut Parser) {
         }
     }
     description(p);
-    p.exit(mark, pos, SyntaxKind::ImportClause);
+    p.exit(mark, SyntaxKind::ImportClause);
 }
 
 fn import_list(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     p.expect(TokenKind::Ident);
     while p.consume(TokenKind::Comma) && !p.eof() {
         p.expect(TokenKind::Ident);
     }
-    p.exit(mark, pos, SyntaxKind::ImportList);
+    p.exit(mark, SyntaxKind::ImportList);
 }
 
 // A.2.3 Extends
 
 fn extends_clause(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     p.expect(TokenKind::Extends);
     type_specifier(p);
     if p.check(TokenKind::LParen) {
@@ -576,31 +585,31 @@ fn extends_clause(p: &mut Parser) {
     if p.check(TokenKind::Annotation) {
         annotation_clause(p);
     }
-    p.exit(mark, pos, SyntaxKind::ExtendsClause);
+    p.exit(mark, SyntaxKind::ExtendsClause);
 }
 
 fn constraining_clause(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     p.expect(TokenKind::Constrainedby);
     type_specifier(p);
     if p.check(TokenKind::LParen) {
         class_modification(p);
     }
-    p.exit(mark, pos, SyntaxKind::ConstrainingClause);
+    p.exit(mark, SyntaxKind::ConstrainingClause);
 }
 
 fn class_or_inheritance_modification(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     p.expect(TokenKind::LParen);
     if !p.consume(TokenKind::RParen) {
         argument_or_inheritance_modification_list(p);
         p.expect(TokenKind::RParen);
     }
-    p.exit(mark, pos, SyntaxKind::ClassOrInheritanceModification);
+    p.exit(mark, SyntaxKind::ClassOrInheritanceModification);
 }
 
 fn argument_or_inheritance_modification_list(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     if p.check(TokenKind::Break) {
         inheritance_modification(p);
     } else {
@@ -613,35 +622,35 @@ fn argument_or_inheritance_modification_list(p: &mut Parser) {
             argument(p);
         }
     }
-    p.exit(mark, pos, SyntaxKind::ArgumentOrInheritanceModificationList);
+    p.exit(mark, SyntaxKind::ArgumentOrInheritanceModificationList);
 }
 
 fn inheritance_modification(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     p.expect(TokenKind::Break);
     if p.check(TokenKind::Connect) {
         connect_equation(p);
     } else {
         p.expect(TokenKind::Ident);
     }
-    p.exit(mark, pos, SyntaxKind::InheritanceModification);
+    p.exit(mark, SyntaxKind::InheritanceModification);
 }
 
 // A.2.4 Component Clause
 
 fn component_clause(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     type_prefix(p);
     type_specifier(p);
     if p.check(TokenKind::LBracket) {
         array_subscripts(p);
     }
     component_list(p);
-    p.exit(mark, pos, SyntaxKind::ComponentClause);
+    p.exit(mark, SyntaxKind::ComponentClause);
 }
 
 fn type_prefix(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     if !p.consume(TokenKind::Flow) {
         p.consume(TokenKind::Stream);
     }
@@ -651,37 +660,37 @@ fn type_prefix(p: &mut Parser) {
     if !p.consume(TokenKind::Input) {
         p.consume(TokenKind::Output);
     }
-    p.exit(mark, pos, SyntaxKind::TypePrefix);
+    p.exit(mark, SyntaxKind::TypePrefix);
 }
 
 fn component_list(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     component_declaration(p);
     while p.consume(TokenKind::Comma) && !p.eof() {
         component_declaration(p);
     }
-    p.exit(mark, pos, SyntaxKind::ComponentList);
+    p.exit(mark, SyntaxKind::ComponentList);
 }
 
 fn component_declaration(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     declaration(p);
     if p.check(TokenKind::If) {
         condition_attribute(p);
     }
     description(p);
-    p.exit(mark, pos, SyntaxKind::ComponentDeclaration);
+    p.exit(mark, SyntaxKind::ComponentDeclaration);
 }
 
 fn condition_attribute(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     p.expect(TokenKind::If);
     expression(p);
-    p.exit(mark, pos, SyntaxKind::ConditionAttribute);
+    p.exit(mark, SyntaxKind::ConditionAttribute);
 }
 
 fn declaration(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     p.expect(TokenKind::Ident);
     if p.check(TokenKind::LBracket) {
         array_subscripts(p);
@@ -689,13 +698,13 @@ fn declaration(p: &mut Parser) {
     if p.check_any(&[TokenKind::LParen, TokenKind::Equal, TokenKind::Assign]) {
         modification(p);
     }
-    p.exit(mark, pos, SyntaxKind::Declaration);
+    p.exit(mark, SyntaxKind::Declaration);
 }
 
 // A.2.5 Modification
 
 fn modification(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     if p.check_any(&[TokenKind::Equal, TokenKind::Assign]) {
         p.advance();
         modification_expression(p);
@@ -705,48 +714,48 @@ fn modification(p: &mut Parser) {
             modification_expression(p);
         }
     }
-    p.exit(mark, pos, SyntaxKind::Modification);
+    p.exit(mark, SyntaxKind::Modification);
 }
 
 fn modification_expression(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     if !p.consume(TokenKind::Break) {
         expression(p);
     }
-    p.exit(mark, pos, SyntaxKind::ModificationExpression);
+    p.exit(mark, SyntaxKind::ModificationExpression);
 }
 
 fn class_modification(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     p.expect(TokenKind::LParen);
     if !p.consume(TokenKind::RParen) {
         argument_list(p);
         p.expect(TokenKind::RParen);
     }
-    p.exit(mark, pos, SyntaxKind::ClassModification);
+    p.exit(mark, SyntaxKind::ClassModification);
 }
 
 fn argument_list(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     argument(p);
     while p.consume(TokenKind::Comma) && !p.eof() {
         argument(p);
     }
-    p.exit(mark, pos, SyntaxKind::ArgumentList);
+    p.exit(mark, SyntaxKind::ArgumentList);
 }
 
 fn argument(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     if p.check(TokenKind::Redeclare) {
         element_redeclaration(p);
     } else {
         element_modification_or_replaceable(p);
     }
-    p.exit(mark, pos, SyntaxKind::Argument);
+    p.exit(mark, SyntaxKind::Argument);
 }
 
 fn element_modification_or_replaceable(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     p.consume(TokenKind::Each);
     p.consume(TokenKind::Final);
     if p.check(TokenKind::Replaceable) {
@@ -754,21 +763,21 @@ fn element_modification_or_replaceable(p: &mut Parser) {
     } else {
         element_modification(p);
     }
-    p.exit(mark, pos, SyntaxKind::ElementModificationOrReplaceable);
+    p.exit(mark, SyntaxKind::ElementModificationOrReplaceable);
 }
 
 fn element_modification(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     name(p);
     if p.check_any(&[TokenKind::LParen, TokenKind::Equal, TokenKind::Assign]) {
         modification(p);
     }
     description_string(p);
-    p.exit(mark, pos, SyntaxKind::ElementModification);
+    p.exit(mark, SyntaxKind::ElementModification);
 }
 
 fn element_redeclaration(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     p.expect(TokenKind::Redeclare);
     p.consume(TokenKind::Each);
     p.consume(TokenKind::Final);
@@ -779,11 +788,11 @@ fn element_redeclaration(p: &mut Parser) {
     } else {
         component_clause1(p);
     }
-    p.exit(mark, pos, SyntaxKind::ElementReplaceable);
+    p.exit(mark, SyntaxKind::ElementReplaceable);
 }
 
 fn element_replaceable(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     p.expect(TokenKind::Replaceable);
     if p.check_any(&CLASS_PREFS) {
         short_class_definition(p);
@@ -793,57 +802,57 @@ fn element_replaceable(p: &mut Parser) {
     if p.check(TokenKind::Constrainedby) {
         constraining_clause(p);
     }
-    p.exit(mark, pos, SyntaxKind::ElementReplaceable);
+    p.exit(mark, SyntaxKind::ElementReplaceable);
 }
 
 fn component_clause1(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     type_prefix(p);
     type_specifier(p);
     component_declaration1(p);
-    p.exit(mark, pos, SyntaxKind::ComponentClause1);
+    p.exit(mark, SyntaxKind::ComponentClause1);
 }
 
 fn component_declaration1(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     declaration(p);
     description(p);
-    p.exit(mark, pos, SyntaxKind::ComponentDeclaration1);
+    p.exit(mark, SyntaxKind::ComponentDeclaration1);
 }
 
 fn short_class_definition(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     class_prefixes(p);
     short_class_specifier(p);
-    p.exit(mark, pos, SyntaxKind::ShortClassDefinition);
+    p.exit(mark, SyntaxKind::ShortClassDefinition);
 }
 
 // A.2.6 Equations
 
 fn equation_section(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     p.consume(TokenKind::Initial);
     p.expect(TokenKind::Equation);
     while !p.check_any(&SECTION_BREAKERS) && !p.eof() {
         equation(p);
         p.expect(TokenKind::Semi);
     }
-    p.exit(mark, pos, SyntaxKind::EquationSection);
+    p.exit(mark, SyntaxKind::EquationSection);
 }
 
 fn algorithm_section(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     p.consume(TokenKind::Initial);
     p.expect(TokenKind::Algorithm);
     while !p.check_any(&SECTION_BREAKERS) && !p.eof() {
         statement(p);
         p.expect(TokenKind::Semi);
     }
-    p.exit(mark, pos, SyntaxKind::AlgorithmSection);
+    p.exit(mark, SyntaxKind::AlgorithmSection);
 }
 
 fn equation(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     match p.nth(0) {
         TokenKind::If => if_equation(p),
         TokenKind::For => for_equation(p),
@@ -861,11 +870,11 @@ fn equation(p: &mut Parser) {
         }
     }
     description(p);
-    p.exit(mark, pos, SyntaxKind::Equation);
+    p.exit(mark, SyntaxKind::Equation);
 }
 
 fn statement(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     match p.nth(0) {
         TokenKind::If => if_statement(p),
         TokenKind::For => for_statement(p),
@@ -890,11 +899,11 @@ fn statement(p: &mut Parser) {
         }
     }
     description(p);
-    p.exit(mark, pos, SyntaxKind::Statement);
+    p.exit(mark, SyntaxKind::Statement);
 }
 
 fn if_equation(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     p.expect(TokenKind::If);
     expression(p);
     p.expect(TokenKind::Then);
@@ -919,11 +928,11 @@ fn if_equation(p: &mut Parser) {
     }
     p.expect(TokenKind::End);
     p.expect(TokenKind::If);
-    p.exit(mark, pos, SyntaxKind::IfEquation);
+    p.exit(mark, SyntaxKind::IfEquation);
 }
 
 fn if_statement(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     p.expect(TokenKind::If);
     expression(p);
     p.expect(TokenKind::Then);
@@ -948,11 +957,11 @@ fn if_statement(p: &mut Parser) {
     }
     p.expect(TokenKind::End);
     p.expect(TokenKind::If);
-    p.exit(mark, pos, SyntaxKind::IfStatement);
+    p.exit(mark, SyntaxKind::IfStatement);
 }
 
 fn for_equation(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     p.expect(TokenKind::For);
     for_indices(p);
     p.expect(TokenKind::Loop);
@@ -962,11 +971,11 @@ fn for_equation(p: &mut Parser) {
     }
     p.expect(TokenKind::End);
     p.expect(TokenKind::For);
-    p.exit(mark, pos, SyntaxKind::ForEquation);
+    p.exit(mark, SyntaxKind::ForEquation);
 }
 
 fn for_statement(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     p.expect(TokenKind::For);
     for_indices(p);
     p.expect(TokenKind::Loop);
@@ -976,29 +985,29 @@ fn for_statement(p: &mut Parser) {
     }
     p.expect(TokenKind::End);
     p.expect(TokenKind::For);
-    p.exit(mark, pos, SyntaxKind::ForStatement);
+    p.exit(mark, SyntaxKind::ForStatement);
 }
 
 fn for_indices(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     for_index(p);
     while p.consume(TokenKind::Comma) && !p.eof() {
         for_index(p);
     }
-    p.exit(mark, pos, SyntaxKind::ForIndices);
+    p.exit(mark, SyntaxKind::ForIndices);
 }
 
 fn for_index(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     p.expect(TokenKind::Ident);
     if p.consume(TokenKind::In) {
         expression(p);
     }
-    p.exit(mark, pos, SyntaxKind::ForIndex);
+    p.exit(mark, SyntaxKind::ForIndex);
 }
 
 fn while_statement(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     p.expect(TokenKind::While);
     expression(p);
     p.expect(TokenKind::Loop);
@@ -1008,11 +1017,11 @@ fn while_statement(p: &mut Parser) {
     }
     p.expect(TokenKind::End);
     p.expect(TokenKind::While);
-    p.exit(mark, pos, SyntaxKind::WhenStatement);
+    p.exit(mark, SyntaxKind::WhenStatement);
 }
 
 fn when_equation(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     p.expect(TokenKind::When);
     expression(p);
     p.expect(TokenKind::Then);
@@ -1031,11 +1040,11 @@ fn when_equation(p: &mut Parser) {
     }
     p.expect(TokenKind::End);
     p.expect(TokenKind::When);
-    p.exit(mark, pos, SyntaxKind::WhenEquation);
+    p.exit(mark, SyntaxKind::WhenEquation);
 }
 
 fn when_statement(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     p.expect(TokenKind::When);
     expression(p);
     p.expect(TokenKind::Then);
@@ -1054,24 +1063,24 @@ fn when_statement(p: &mut Parser) {
     }
     p.expect(TokenKind::End);
     p.expect(TokenKind::When);
-    p.exit(mark, pos, SyntaxKind::WhenStatement);
+    p.exit(mark, SyntaxKind::WhenStatement);
 }
 
 fn connect_equation(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     p.expect(TokenKind::Connect);
     p.expect(TokenKind::LParen);
     component_reference(p);
     p.expect(TokenKind::Comma);
     component_reference(p);
     p.expect(TokenKind::RParen);
-    p.exit(mark, pos, SyntaxKind::ConnectEquation);
+    p.exit(mark, SyntaxKind::ConnectEquation);
 }
 
 // A.2.7 Expressions
 
 fn expression(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     match p.nth(0) {
         TokenKind::If => {
             p.advance();
@@ -1089,11 +1098,11 @@ fn expression(p: &mut Parser) {
         }
         _ => simple_expression(p),
     }
-    p.exit(mark, pos, SyntaxKind::Expression);
+    p.exit(mark, SyntaxKind::Expression);
 }
 
 fn simple_expression(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     logical_expression(p);
     if p.consume(TokenKind::Colon) {
         logical_expression(p);
@@ -1101,32 +1110,32 @@ fn simple_expression(p: &mut Parser) {
             logical_expression(p);
         }
     }
-    p.exit(mark, pos, SyntaxKind::SimpleExpression);
+    p.exit(mark, SyntaxKind::SimpleExpression);
 }
 
 fn logical_expression(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     logical_term(p);
     while p.consume(TokenKind::Or) && !p.eof() {
         logical_term(p);
     }
-    p.exit(mark, pos, SyntaxKind::LogicalExpression);
+    p.exit(mark, SyntaxKind::LogicalExpression);
 }
 
 fn logical_term(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     logical_factor(p);
     while p.consume(TokenKind::And) && !p.eof() {
         logical_factor(p);
     }
-    p.exit(mark, pos, SyntaxKind::LogicalTerm);
+    p.exit(mark, SyntaxKind::LogicalTerm);
 }
 
 fn logical_factor(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     p.consume(TokenKind::Not);
     relation(p);
-    p.exit(mark, pos, SyntaxKind::LogicalFactor);
+    p.exit(mark, SyntaxKind::LogicalFactor);
 }
 
 fn relation(p: &mut Parser) {
@@ -1138,21 +1147,21 @@ fn relation(p: &mut Parser) {
         TokenKind::Eq,
         TokenKind::Neq,
     ];
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     arithmetic_expression(p);
     if p.check_any(&RELOPS) {
         relational_operator(p);
         arithmetic_expression(p);
     }
-    p.exit(mark, pos, SyntaxKind::Relation);
+    p.exit(mark, SyntaxKind::Relation);
 }
 
 fn relational_operator(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     // It is only called in `relation`, which already does the checking,
     // so no need to check token once again
     p.advance();
-    p.exit(mark, pos, SyntaxKind::RelationalOperator);
+    p.exit(mark, SyntaxKind::RelationalOperator);
 }
 
 fn arithmetic_expression(p: &mut Parser) {
@@ -1162,7 +1171,7 @@ fn arithmetic_expression(p: &mut Parser) {
         TokenKind::Minus,
         TokenKind::DotMinus,
     ];
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     if p.check_any(&ADDOPS) {
         add_operator(p);
     }
@@ -1171,15 +1180,15 @@ fn arithmetic_expression(p: &mut Parser) {
         add_operator(p);
         term(p);
     }
-    p.exit(mark, pos, SyntaxKind::ArithmeticExpression);
+    p.exit(mark, SyntaxKind::ArithmeticExpression);
 }
 
 fn add_operator(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     // It is only called in `arithmetic_expression`, which already does the checking,
     // so no need to check token once again
     p.advance();
-    p.exit(mark, pos, SyntaxKind::AddOperator);
+    p.exit(mark, SyntaxKind::AddOperator);
 }
 
 fn term(p: &mut Parser) {
@@ -1189,35 +1198,35 @@ fn term(p: &mut Parser) {
         TokenKind::Slash,
         TokenKind::DotSlash,
     ];
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     factor(p);
     while p.check_any(&MULOPS) && !p.eof() {
         mul_operator(p);
         factor(p);
     }
-    p.exit(mark, pos, SyntaxKind::Term);
+    p.exit(mark, SyntaxKind::Term);
 }
 
 fn mul_operator(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     // It is only called in `term`, which already does the checking,
     // so no need to check token once again
     p.advance();
-    p.exit(mark, pos, SyntaxKind::MulOperator);
+    p.exit(mark, SyntaxKind::MulOperator);
 }
 
 fn factor(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     primary(p);
     if p.check_any(&[TokenKind::Flex, TokenKind::DotFlex]) {
         p.advance();
         primary(p);
     }
-    p.exit(mark, pos, SyntaxKind::Factor);
+    p.exit(mark, SyntaxKind::Factor);
 }
 
 fn primary(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     match p.nth(0) {
         TokenKind::Ureal
         | TokenKind::Uint
@@ -1254,27 +1263,27 @@ fn primary(p: &mut Parser) {
             }
         }
     }
-    p.exit(mark, pos, SyntaxKind::Primary);
+    p.exit(mark, SyntaxKind::Primary);
 }
 
 fn type_specifier(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     p.consume(TokenKind::Dot);
     name(p);
-    p.exit(mark, pos, SyntaxKind::TypeSpecifier);
+    p.exit(mark, SyntaxKind::TypeSpecifier);
 }
 
 fn name(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     p.expect(TokenKind::Ident);
     while p.consume(TokenKind::Dot) && !p.eof() {
         p.expect(TokenKind::Ident);
     }
-    p.exit(mark, pos, SyntaxKind::Name);
+    p.exit(mark, SyntaxKind::Name);
 }
 
 fn component_reference(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     p.consume(TokenKind::Dot);
     p.expect(TokenKind::Ident);
     if p.check(TokenKind::LBracket) {
@@ -1286,11 +1295,11 @@ fn component_reference(p: &mut Parser) {
             array_subscripts(p);
         }
     }
-    p.exit(mark, pos, SyntaxKind::ComponentReference);
+    p.exit(mark, SyntaxKind::ComponentReference);
 }
 
 fn result_reference(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     if p.consume(TokenKind::Der) {
         p.expect(TokenKind::LParen);
         component_reference(p);
@@ -1301,21 +1310,21 @@ fn result_reference(p: &mut Parser) {
     } else {
         component_reference(p);
     }
-    p.exit(mark, pos, SyntaxKind::ResultReference);
+    p.exit(mark, SyntaxKind::ResultReference);
 }
 
 fn function_call_args(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     p.expect(TokenKind::LParen);
     if !p.consume(TokenKind::RParen) {
         function_arguments(p);
         p.expect(TokenKind::RParen);
     }
-    p.exit(mark, pos, SyntaxKind::FunctionCallArgs);
+    p.exit(mark, SyntaxKind::FunctionCallArgs);
 }
 
 fn function_arguments(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     if p.nth(1) == TokenKind::Equal {
         named_arguments(p);
     } else if !p.check(TokenKind::Function) {
@@ -1331,11 +1340,11 @@ fn function_arguments(p: &mut Parser) {
             function_arguments_non_first(p);
         }
     }
-    p.exit(mark, pos, SyntaxKind::FunctionArguments);
+    p.exit(mark, SyntaxKind::FunctionArguments);
 }
 
 fn function_arguments_non_first(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     if p.nth(1) == TokenKind::Equal {
         named_arguments(p);
     } else {
@@ -1344,58 +1353,58 @@ fn function_arguments_non_first(p: &mut Parser) {
             function_arguments_non_first(p);
         }
     }
-    p.exit(mark, pos, SyntaxKind::FunctionArgumentsNonFirst);
+    p.exit(mark, SyntaxKind::FunctionArgumentsNonFirst);
 }
 
 fn array_arguments(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     expression(p);
     if p.consume(TokenKind::Comma) {
         array_arguments_non_first(p);
     } else if p.consume(TokenKind::For) {
         for_indices(p);
     }
-    p.exit(mark, pos, SyntaxKind::ArrayArguments);
+    p.exit(mark, SyntaxKind::ArrayArguments);
 }
 
 fn array_arguments_non_first(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     expression(p);
     if p.consume(TokenKind::Comma) {
         array_arguments_non_first(p);
     }
-    p.exit(mark, pos, SyntaxKind::ArrayArgumentsNonFirst);
+    p.exit(mark, SyntaxKind::ArrayArgumentsNonFirst);
 }
 
 fn named_arguments(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     named_argument(p);
     if p.consume(TokenKind::Comma) {
         named_arguments(p);
     }
-    p.exit(mark, pos, SyntaxKind::NamedArguments);
+    p.exit(mark, SyntaxKind::NamedArguments);
 }
 
 fn named_argument(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     p.expect(TokenKind::Ident);
     p.expect(TokenKind::Equal);
     function_argument(p);
-    p.exit(mark, pos, SyntaxKind::NamedArgument);
+    p.exit(mark, SyntaxKind::NamedArgument);
 }
 
 fn function_argument(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     if p.check(TokenKind::Function) {
         function_partial_application(p);
     } else {
         expression(p);
     }
-    p.exit(mark, pos, SyntaxKind::FunctionArgument);
+    p.exit(mark, SyntaxKind::FunctionArgument);
 }
 
 fn function_partial_application(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     p.expect(TokenKind::Function);
     type_specifier(p);
     p.expect(TokenKind::LParen);
@@ -1403,11 +1412,11 @@ fn function_partial_application(p: &mut Parser) {
         named_arguments(p);
     }
     p.expect(TokenKind::RParen);
-    p.exit(mark, pos, SyntaxKind::FunctionPartialApplication);
+    p.exit(mark, SyntaxKind::FunctionPartialApplication);
 }
 
 fn output_expression_list(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     // This production can only occur inside parentheses, so easiest way
     // is to check for right paren
     if !p.check(TokenKind::RParen) {
@@ -1419,61 +1428,61 @@ fn output_expression_list(p: &mut Parser) {
             }
         }
     }
-    p.exit(mark, pos, SyntaxKind::OutputExpressionList);
+    p.exit(mark, SyntaxKind::OutputExpressionList);
 }
 
 fn expression_list(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     expression(p);
     while p.consume(TokenKind::Comma) && !p.eof() {
         expression(p);
     }
-    p.exit(mark, pos, SyntaxKind::ExpressionList);
+    p.exit(mark, SyntaxKind::ExpressionList);
 }
 
 fn array_subscripts(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     p.expect(TokenKind::LBracket);
     subscript(p);
     while p.consume(TokenKind::Comma) && !p.eof() {
         subscript(p);
     }
     p.expect(TokenKind::RBracket);
-    p.exit(mark, pos, SyntaxKind::ArraySubscripts);
+    p.exit(mark, SyntaxKind::ArraySubscripts);
 }
 
 fn subscript(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     if !p.consume(TokenKind::Colon) {
         expression(p);
     }
-    p.exit(mark, pos, SyntaxKind::Subscript);
+    p.exit(mark, SyntaxKind::Subscript);
 }
 
 fn description(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     description_string(p);
     if p.check(TokenKind::Annotation) {
         annotation_clause(p);
     }
-    p.exit(mark, pos, SyntaxKind::Description);
+    p.exit(mark, SyntaxKind::Description);
 }
 
 fn description_string(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     if p.consume(TokenKind::String) {
         while p.consume(TokenKind::Plus) && !p.eof() {
             p.expect(TokenKind::String);
         }
     }
-    p.exit(mark, pos, SyntaxKind::DescriptionString);
+    p.exit(mark, SyntaxKind::DescriptionString);
 }
 
 fn annotation_clause(p: &mut Parser) {
-    let (mark, pos) = p.enter();
+    let mark = p.enter();
     p.expect(TokenKind::Annotation);
     class_modification(p);
-    p.exit(mark, pos, SyntaxKind::AnnotationClause);
+    p.exit(mark, SyntaxKind::AnnotationClause);
 }
 
 #[cfg(test)]
@@ -1490,7 +1499,7 @@ mod tests {
         let mut result = true;
         for event in events {
             match event {
-                SyntaxEvent::Enter { typ, .. } => match typ {
+                SyntaxEvent::Enter(p) => match p.typ {
                     SyntaxKind::Error => result = false,
                     _ => (),
                 },

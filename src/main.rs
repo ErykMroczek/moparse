@@ -22,8 +22,8 @@ fn main() {
                     Terminal::Error { msg, tok} => println!("Error: '{}' ({:?})", msg, tokens.get_token(tok).unwrap()),
                 }
             },
-            SyntaxEvent::Enter { typ, .. } => println!("Enter: {:?}", typ),
-            SyntaxEvent::Exit { typ, .. } => println!("Exit: {:?}", typ),
+            SyntaxEvent::Enter(p) => println!("Enter: {:?}", p.typ),
+            SyntaxEvent::Exit(p) => println!("Exit: {:?}", p.typ),
         }
     }
 }

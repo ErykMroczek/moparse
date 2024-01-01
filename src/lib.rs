@@ -1,7 +1,7 @@
 // Public elements
 pub use self::tokens::{TokenKind, Token, TokenCollection};
 pub use self::syntax::SyntaxKind;
-pub use self::events::{SyntaxEvent, Terminal};
+pub use self::events::{SyntaxEvent, Terminal, Payload};
 pub use self::lexing::lex;
 pub use self::parsing::parse;
 

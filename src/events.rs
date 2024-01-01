@@ -1,6 +1,17 @@
 use crate::{syntax::SyntaxKind, Token, TokenCollection};
 
 #[derive(Debug, PartialEq)]
+/// Stores info about the `Enter` or `Exit` syntax events
+pub struct Payload {
+    /// Modelica production, like `equation`
+    pub typ: SyntaxKind,
+    /// index of the corresponding token from the `TokenCollection`
+    pub tok: usize,
+    /// index of the corresponding opposite event in the events list
+    pub pair: usize,
+}
+
+#[derive(Debug, PartialEq)]
 /// Represents a single Modelica syntax event.
 ///
 /// Syntax event may mark starts and ends of productions or terminals.
@@ -8,32 +19,10 @@ use crate::{syntax::SyntaxKind, Token, TokenCollection};
 /// tree or an AST.
 pub enum SyntaxEvent {
     /// Event indicating beginning of the Modelica production.
-    ///
-    /// * `typ`: Modelica production, like `equation`
-    /// * `tok`: index of the corresponding token from the
-    ///   `TokenCollection`
-    /// * `exit`: index of the corresponding `Exit` event in the events
-    ///   list
-    Enter {
-        typ: SyntaxKind,
-        tok: usize,
-        exit: usize,
-    },
+    Enter(Payload),
     /// Event indicating an end of some Modelica production.
-    ///
-    /// * `typ`: Modelica production, like `equation`
-    /// * `tok`: index of the corresponding token from the
-    ///   `TokenCollection`
-    /// * `enter`: index of the `Enter` event that corresponds to this
-    ///   `Exit`
-    Exit {
-        typ: SyntaxKind,
-        tok: usize,
-        enter: usize,
-    },
+    Exit(Payload),
     /// Event indicating a terminal (token or error).
-    ///
-    /// Contains an instance of the `Terminal` enum.
     Advance(Terminal),
 }
 
@@ -42,7 +31,7 @@ impl<'a> SyntaxEvent {
     /// corresponds to this event.
     pub fn get_token(&'a self, tokens: &'a TokenCollection) -> &'a Token {
         match self {
-            Self::Enter { tok, .. } | Self::Exit { tok, .. } => tokens.get_token(*tok).unwrap(),
+            Self::Enter(p) | Self::Exit(p) => tokens.get_token(p.tok).unwrap(),
             Self::Advance(term) => term.get_token(tokens),
         }
     }
