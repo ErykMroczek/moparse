@@ -162,18 +162,23 @@ impl<'a> Parser<'a> {
             }
             _ => unreachable!(),
         }
-        let tok;
         match self.events.last().unwrap() {
-            // Either this production was empty or no new token was consumed
-            // after the previous production was closed - reuse the token
-            SyntaxEvent::Enter(p) | SyntaxEvent::Exit(p) => tok = p.tok,
-            _ => tok = self.pos - 1,
+            SyntaxEvent::Enter(..) => _ = self.events.pop(),
+            SyntaxEvent::Exit(p) => {
+                self.events.push(SyntaxEvent::Exit(Payload {
+                    typ,
+                    tok: p.tok,
+                    pair: m,
+                }));
+            }
+            _ => {
+                self.events.push(SyntaxEvent::Exit(Payload {
+                    typ,
+                    tok: self.pos - 1,
+                    pair: m,
+                }));
+            }
         }
-        self.events.push(SyntaxEvent::Exit(Payload {
-            typ,
-            tok,
-            pair: m,
-        }));
     }
 
     /// Advance the parser, consume the token and push it into the events vector
