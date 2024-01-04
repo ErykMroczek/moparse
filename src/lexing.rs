@@ -264,13 +264,13 @@ impl<'a> Lexer<'a> {
     /// Scan the slice that is supposed to be a line comment
     fn lex_linecomment(&mut self) {
         loop {
-            let next = self.next();
+            let next = self.peek();
             if next.is_none() {
                 return self.generate_token(TokenKind::LineComment);
             }
             match next.unwrap() {
-                '\n' => return self.generate_token(TokenKind::LineComment),
-                _ => continue,
+                '\r' | '\n' => return self.generate_token(TokenKind::LineComment),
+                _ => _ = self.next(),
             }
         }
     }
