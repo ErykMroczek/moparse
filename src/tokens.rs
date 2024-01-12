@@ -209,10 +209,6 @@ impl TokenCollection {
         self.all.len()
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.all.len() == 0
-    }
-
     /// Return number of semantically meaningful tokens, ie. not comments and not errors.
     pub fn token_count(&self) -> usize {
         self.tokens.len()
@@ -231,18 +227,13 @@ impl TokenCollection {
     /// Return i-th item (token, comment or error). Return `None` if
     /// there is no such item.
     pub fn get_item(&self, i: usize) -> Option<&Token> {
-        if i < self.len() {
-            Some(&self.all[i])
-        } else {
-            None
-        }
+        self.all.get(i)
     }
 
     /// Return i-th token. Return `None` if there is no such token.
     pub fn get_token(&self, i: usize) -> Option<&Token> {
-        if i < self.tokens.len() {
-            let j = self.tokens[i];
-            Some(&self.all[j])
+        if let Some(j) = self.tokens.get(i) {
+            self.all.get(*j)
         } else {
             None
         }
@@ -250,9 +241,8 @@ impl TokenCollection {
 
     /// Return i-th comment. Return `None` if there is no such comment.
     pub fn get_comment(&self, i: usize) -> Option<&Token> {
-        if i < self.comments.len() {
-            let j = self.comments[i];
-            Some(&self.all[j])
+        if let Some(j) = self.comments.get(i) {
+            self.all.get(*j)
         } else {
             None
         }
@@ -260,11 +250,17 @@ impl TokenCollection {
 
     /// Return i-th error. Return `None` if there is no such error.
     pub fn get_error(&self, i: usize) -> Option<&Token> {
-        if i < self.errors.len() {
-            let j = self.errors[i];
-            Some(&self.all[j])
+        if let Some(j) = self.errors.get(i) {
+            self.all.get(*j)
         } else {
             None
         }
+    }
+
+    /// Return iterator over lexical errors
+    pub fn errors(&self) -> impl Iterator<Item = &Token> {
+        self.errors
+            .iter()
+            .map(|i| self.all.get(*i).unwrap())
     }
 }
