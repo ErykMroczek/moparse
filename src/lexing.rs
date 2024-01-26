@@ -1,4 +1,7 @@
-use crate::{errors::SyntaxError, tokens::{ModelicaToken, Token, Position}};
+use crate::{
+    errors::SyntaxError,
+    tokens::{ModelicaToken, Position, Token},
+};
 use std::{iter::Peekable, str::CharIndices};
 
 /// Return collections of Modelica tokens and errors generated from the input.
@@ -37,8 +40,16 @@ impl<'a> Lexer<'a> {
         return Lexer {
             source,
             chars: source.char_indices().peekable(),
-            start: Position { pos: 0, line: 1, col: 1 },
-            current: Position { pos: 0, line: 1, col: 1 },
+            start: Position {
+                pos: 0,
+                line: 1,
+                col: 1,
+            },
+            current: Position {
+                pos: 0,
+                line: 1,
+                col: 1,
+            },
             tokens: Vec::new(),
             errors: Vec::new(),
             at_eof: false,
@@ -72,7 +83,7 @@ impl<'a> Lexer<'a> {
             None => {
                 self.at_eof = true;
                 None
-            },
+            }
         }
     }
 
@@ -80,7 +91,13 @@ impl<'a> Lexer<'a> {
     fn generate_token(&mut self, kind: ModelicaToken) {
         let start = self.start;
         let end = self.current;
-        let token = Token { idx: self.tokens.len(), text: String::from(&self.source[start.pos..end.pos]), kind, start, end };
+        let token = Token {
+            idx: self.tokens.len(),
+            text: String::from(&self.source[start.pos..end.pos]),
+            kind,
+            start,
+            end,
+        };
         self.tokens.push(token);
         self.jump();
     }
@@ -381,7 +398,7 @@ impl<'a> Lexer<'a> {
             "each" => self.generate_token(ModelicaToken::Each),
             "annotation" => self.generate_token(ModelicaToken::Annotation),
             "external" => self.generate_token(ModelicaToken::External),
-            "true" | "false"  => self.generate_token(ModelicaToken::Bool),
+            "true" | "false" => self.generate_token(ModelicaToken::Bool),
             _ => self.generate_token(ModelicaToken::Identifier),
         }
     }
@@ -400,7 +417,7 @@ mod tests {
         /* End there goes
         a block comment! */
         final constant Some.Type 'quoted'(min = 0, max = 1) = func.call(x);"#;
-        let (tokens, errors)  = lex(source);
+        let (tokens, errors) = lex(source);
         assert_eq!(tokens.len(), 48);
         assert_eq!(tokens[0].text, "within");
         assert_eq!(tokens[0].kind, ModelicaToken::Within);
@@ -430,7 +447,7 @@ mod tests {
     #[test]
     fn lexing_unicode_string() {
         let source = "String s := \"stringą\";";
-        let (tokens, errors)  = lex(source);
+        let (tokens, errors) = lex(source);
         assert_eq!(errors.len(), 0);
         assert_eq!(tokens.len(), 5);
         assert_eq!(tokens[3].text, "\"stringą\"");
