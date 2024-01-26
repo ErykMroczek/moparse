@@ -96,8 +96,7 @@ pub enum ModelicaToken {
     String,
     UInt,
     UReal,
-    True,
-    False,
+    Bool,
 }
 
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -142,8 +141,4 @@ impl Display for Token {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         write!(f, "'{}'", self.text)
     }
-}
-
-impl Token {
-
 }
