@@ -7,6 +7,8 @@ pub struct Payload {
     pub typ: SyntaxKind,
     /// index of the corresponding token from the `TokenCollection`
     pub tok: usize,
+    /// index of this event
+    pub idx: usize,
     /// index of the corresponding opposite event in the events list
     pub pair: usize,
 }

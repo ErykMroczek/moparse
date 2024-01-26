@@ -143,7 +143,8 @@ impl<'a> Parser<'a> {
         let p = Payload {
             typ: SyntaxKind::Error,
             tok: self.pos,
-            pair: self.events.len(),
+            idx: mark,
+            pair: mark,
         };
         self.events.push(SyntaxEvent::Enter(p));
         mark
@@ -163,11 +164,19 @@ impl<'a> Parser<'a> {
             _ => unreachable!(),
         }
         match self.events.last().unwrap() {
-            SyntaxEvent::Enter(..) => _ = self.events.pop(),
+            SyntaxEvent::Enter(p) => {
+                self.events.push(SyntaxEvent::Exit(Payload {
+                    typ,
+                    tok: p.tok,
+                    idx: mark,
+                    pair: m,
+                }));
+            }
             SyntaxEvent::Exit(p) => {
                 self.events.push(SyntaxEvent::Exit(Payload {
                     typ,
                     tok: p.tok,
+                    idx: mark,
                     pair: m,
                 }));
             }
@@ -175,6 +184,7 @@ impl<'a> Parser<'a> {
                 self.events.push(SyntaxEvent::Exit(Payload {
                     typ,
                     tok: self.pos - 1,
+                    idx: mark,
                     pair: m,
                 }));
             }
