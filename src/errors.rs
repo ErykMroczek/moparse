@@ -2,13 +2,25 @@ use std::fmt::{Display, Formatter, Error};
 
 
 pub struct SyntaxError {
-    msg: String,
-    line: usize,
-    col: usize,
+    pub msg: String,
+    pub line: usize,
+    pub col: usize,
 }
 
 impl Display for SyntaxError {
+
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         write!(f, "{}:{}: {}", self.line, self.col, self.msg)
+    }
+}
+
+impl SyntaxError {
+
+    pub fn new(msg: String, line: usize, col: usize) -> SyntaxError {
+        SyntaxError {
+            msg: msg,
+            line: line,
+            col: col,
+        }
     }
 }

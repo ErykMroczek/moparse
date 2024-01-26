@@ -1,4 +1,4 @@
-use crate::{syntax::SyntaxKind, Token, TokenCollection};
+use crate::{syntax::SyntaxKind, Token};
 
 #[derive(Debug, PartialEq)]
 /// Stores info about the `Enter` or `Exit` syntax events
@@ -31,9 +31,9 @@ pub enum SyntaxEvent {
 impl<'a> SyntaxEvent {
     /// Return a reference to the token from the `TokenCollection`
     /// corresponds to this event.
-    pub fn get_token(&'a self, tokens: &'a TokenCollection) -> &'a Token {
+    pub fn get_token(&'a self, tokens: &'a Vec<Token>) -> &'a Token {
         match self {
-            Self::Enter(p) | Self::Exit(p) => tokens.get_token(p.tok).unwrap(),
+            Self::Enter(p) | Self::Exit(p) => tokens.get(p.tok).unwrap(),
             Self::Advance(term) => term.get_token(tokens),
         }
     }
@@ -59,10 +59,10 @@ pub enum Terminal {
 impl<'a> Terminal {
     /// Return a reference to the token from the `TokenCollection`
     /// corresponds to this event.
-    pub fn get_token(&'a self, tokens: &'a TokenCollection) -> &'a Token {
+    pub fn get_token(&'a self, tokens: &'a Vec<Token>) -> &'a Token {
         match self {
-            Self::Token(i) => tokens.get_token(*i).unwrap(),
-            Self::Error { tok, .. } => tokens.get_token(*tok).unwrap(),
+            Self::Token(i) => tokens.get(*i).unwrap(),
+            Self::Error { tok, .. } => tokens.get(*tok).unwrap(),
         }
     }
 }

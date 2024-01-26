@@ -1,18 +1,14 @@
-use crate::tokens::{ModelicaToken, Position, TokenCollection};
+use crate::{errors::SyntaxError, tokens::{ModelicaToken, Token, Position}};
 use std::{iter::Peekable, str::CharIndices};
 
-
-/// Return collection of Modelica tokens generated from the input.
-/// 
-/// * `input`: reference to input string containing Modelica source code
-pub fn lex(input: &str) -> TokenCollection {
-    let mut lex = Lexer::new(input);
-    lex.tokenize();
-    lex.tokens
+pub fn lex(source: &str) -> (Vec<Token>, Vec<SyntaxError>) {
+    let mut lexer = Lexer::new(source);
+    lexer.tokenize();
+    (lexer.tokens, lexer.errors)
 }
 
 /// Represents Modelica lexer/scanner.
-struct Lexer<'a> {
+pub struct Lexer<'a> {
     /// Source code
     source: &'a str,
     /// Iterator through source code characters
@@ -22,7 +18,9 @@ struct Lexer<'a> {
     /// Current position of the lexer
     current: Position,
     /// Tokens collected so far
-    tokens: TokenCollection,
+    tokens: Vec<Token>,
+    /// Errors collected so far
+    errors: Vec<SyntaxError>,
     /// `true` if lexer reached the end of file
     at_eof: bool,
 }
@@ -34,19 +32,20 @@ impl<'a> Lexer<'a> {
     /// source code
     ///
     /// * source - reference to the source string
-    fn new(source: &'a str) -> Self {
+    pub fn new(source: &'a str) -> Self {
         return Lexer {
             source,
             chars: source.char_indices().peekable(),
             start: Position { pos: 0, line: 1, col: 1 },
             current: Position { pos: 0, line: 1, col: 1 },
-            tokens: TokenCollection::new(),
+            tokens: Vec::new(),
+            errors: Vec::new(),
             at_eof: false,
         };
     }
 
-    /// Scan the input until EOF
-    fn tokenize(&mut self) {
+    /// Return collection of Modelica tokens generated from the input.
+    pub fn tokenize(&mut self) {
         while !self.at_eof {
             self.lex_source();
         }
@@ -77,10 +76,11 @@ impl<'a> Lexer<'a> {
     }
 
     /// Add a new token to the collection
-    fn generate_token(&mut self, typ: ModelicaToken) {
+    fn generate_token(&mut self, kind: ModelicaToken) {
         let start = self.start;
         let end = self.current;
-        self.tokens.push(String::from(&self.source[self.start.pos..self.current.pos]), typ, start, end);
+        let token = Token { idx: self.tokens.len(), text: String::from(&self.source[start.pos..end.pos]), kind, start, end };
+        self.tokens.push(token);
         self.jump();
     }
 
@@ -88,7 +88,8 @@ impl<'a> Lexer<'a> {
     fn generate_error(&mut self, msg: String) {
         let start = self.start;
         let end = self.current;
-        self.tokens.push(msg, ModelicaToken::Error, start, end);
+        let error = SyntaxError::new(msg, start.line, start.col);
+        self.errors.push(error);
         self.jump();
     }
 
@@ -99,13 +100,11 @@ impl<'a> Lexer<'a> {
 
     /// Return `true` if character is valid and consume it
     fn accept(&mut self, s: &str) -> bool {
-        let peeked = self.peek();
-        if peeked.is_none() {
-            return false;
-        }
-        if s.contains(peeked.unwrap()) {
-            self.next();
-            return true;
+        if let Some(c) = self.peek() {
+            if s.contains(c) {
+                self.next();
+                return true;
+            }
         }
         false
     }
@@ -117,41 +116,38 @@ impl<'a> Lexer<'a> {
 
     /// Top-level lexing procedure
     fn lex_source(&mut self) {
-        let next = self.next();
-        if next.is_none() {
-            return;
-        }
-        let c = next.unwrap();
-        match c {
-            ';' => self.generate_token(ModelicaToken::Semicolon),
-            ',' => self.generate_token(ModelicaToken::Comma),
-            '+' => self.generate_token(ModelicaToken::Plus),
-            '-' => self.generate_token(ModelicaToken::Minus),
-            '*' => self.generate_token(ModelicaToken::Star),
-            '^' => self.generate_token(ModelicaToken::Flex),
-            '(' => self.generate_token(ModelicaToken::LParen),
-            '{' => self.generate_token(ModelicaToken::LCurly),
-            '[' => self.generate_token(ModelicaToken::LBracket),
-            ')' => self.generate_token(ModelicaToken::RParen),
-            '}' => self.generate_token(ModelicaToken::RCurly),
-            ']' => self.generate_token(ModelicaToken::RBracket),
-            ':' => self.lex_colon(),
-            '=' => self.lex_equal(),
-            '<' => self.lex_lesser(),
-            '>' => self.lex_greater(),
-            '.' => self.lex_dot(),
-            '"' => self.lex_string(),
-            '\'' => self.lex_qident(),
-            '/' => self.lex_slash(),
-            _ => {
-                if c.is_whitespace() {
-                    return self.lex_space();
-                } else if c.is_numeric() {
-                    return self.lex_numeral();
-                } else if c.is_ascii_alphabetic() || c == '_' {
-                    return self.lex_nondigit();
+        if let Some(c) = self.next() {
+            match c {
+                ';' => self.generate_token(ModelicaToken::Semicolon),
+                ',' => self.generate_token(ModelicaToken::Comma),
+                '+' => self.generate_token(ModelicaToken::Plus),
+                '-' => self.generate_token(ModelicaToken::Minus),
+                '*' => self.generate_token(ModelicaToken::Star),
+                '^' => self.generate_token(ModelicaToken::Flex),
+                '(' => self.generate_token(ModelicaToken::LParen),
+                '{' => self.generate_token(ModelicaToken::LCurly),
+                '[' => self.generate_token(ModelicaToken::LBracket),
+                ')' => self.generate_token(ModelicaToken::RParen),
+                '}' => self.generate_token(ModelicaToken::RCurly),
+                ']' => self.generate_token(ModelicaToken::RBracket),
+                ':' => self.lex_colon(),
+                '=' => self.lex_equal(),
+                '<' => self.lex_lesser(),
+                '>' => self.lex_greater(),
+                '.' => self.lex_dot(),
+                '"' => self.lex_string(),
+                '\'' => self.lex_qident(),
+                '/' => self.lex_slash(),
+                _ => {
+                    if c.is_whitespace() {
+                        return self.lex_space();
+                    } else if c.is_numeric() {
+                        return self.lex_numeral();
+                    } else if c.is_ascii_alphabetic() || c == '_' {
+                        return self.lex_nondigit();
+                    }
+                    self.generate_error(format!("unexpected character: '{}'", c))
                 }
-                self.generate_error(format!("unexpected character: '{}'", c))
             }
         }
     }
@@ -210,105 +206,92 @@ impl<'a> Lexer<'a> {
 
     /// Scan the slice that is supposed to be a string
     fn lex_string(&mut self) {
-        loop {
-            match self.next() {
-                Some(c) => {
-                    match c {
-                        // Skip the escaped character
-                        '\\' => self.next(),
-                        '"' => return self.generate_token(ModelicaToken::String),
-                        _ => continue,
-                    }
-                }
-                None => return self.generate_error(String::from("unclosed string")),
-            };
+        while let Some(c) = self.next() {
+            match c {
+                // Skip the escaped character
+                '\\' => _ = self.next(),
+                '"' => return self.generate_token(ModelicaToken::String),
+                _ => (),
+            }
         }
+        self.generate_error(String::from("unclosed string"));
     }
 
     /// Scan the slice that is supposed to be a quoted identifier
     fn lex_qident(&mut self) {
         const ALLOWED: &str = "!#$%&()*+,-./:;<>=?@[]^{}|~ \"";
-        loop {
-            match self.next() {
-                Some(c) => match c {
-                    '\\' => self.next(),
-                    '\'' => return self.generate_token(ModelicaToken::Identifier),
-                    _ => {
-                        if !(c.is_ascii_alphanumeric() || c == '_' || ALLOWED.contains(c)) {
-                            return self.generate_error(format!(
-                                "unexpected character inside Q-IDENT: '{}'",
-                                c
-                            ));
-                        }
-                        continue;
+        while let Some(c) = self.next() {
+            match c {
+                '\\' => _ = self.next(),
+                '\'' => return self.generate_token(ModelicaToken::Identifier),
+                _ => {
+                    if !(c.is_ascii_alphanumeric() || c == '_' || ALLOWED.contains(c)) {
+                        return self.generate_error(format!(
+                            "unexpected character inside Q-IDENT: '{}'",
+                            c
+                        ));
                     }
-                },
-                None => return self.generate_error(String::from("unclosed Q-IDENT")),
-            };
+                }
+            }
         }
+        self.generate_error(String::from("unclosed Q-IDENT"));
     }
 
     /// Scan the slice that begins with `/`
     fn lex_slash(&mut self) {
-        let peeked = self.peek();
-        if peeked.is_none() {
-            return self.generate_token(ModelicaToken::Dot);
-        }
-        match peeked.unwrap() {
-            '/' => self.lex_linecomment(),
-            '*' => self.lex_blockcomment(),
-            _ => self.generate_token(ModelicaToken::Slash),
+        if let Some(c) = self.peek() {
+            match c {
+                '/' => self.lex_linecomment(),
+                '*' => self.lex_blockcomment(),
+                _ => self.generate_token(ModelicaToken::Slash),
+            }
+        } else {
+            self.generate_token(ModelicaToken::Dot);
         }
     }
 
     /// Scan the slice that is supposed to be a line comment
     fn lex_linecomment(&mut self) {
-        loop {
-            let next = self.peek();
-            if next.is_none() {
-                return self.generate_token(ModelicaToken::LineComment);
-            }
-            match next.unwrap() {
+        while let Some(c) = self.peek() {
+            match c {
                 '\r' | '\n' => return self.generate_token(ModelicaToken::LineComment),
                 _ => _ = self.next(),
             }
         }
+        self.generate_token(ModelicaToken::LineComment);
     }
 
     /// Scan the slice that is supposed to be a block comment
     fn lex_blockcomment(&mut self) {
-        loop {
-            let next = self.next();
-            if next.is_none() {
-                return self.generate_error(String::from("unclosed block comment"));
-            }
-            if next.unwrap() == '*' {
-                let next = self.next();
-                if next.is_none() {
-                    return self.generate_error(String::from("unclosed block comment"));
+        while let Some(c) = self.next() {
+            match c {
+                '*' => {
+                    if let Some(c) = self.next() {
+                        match c {
+                            '/' => return self.generate_token(ModelicaToken::BlockComment),
+                            _ => (),
+                        }
+                    } else {
+                        return self.generate_error(String::from("unclosed block comment"));
+                    }
                 }
-                if next.unwrap() == '/' {
-                    return self.generate_token(ModelicaToken::BlockComment);
-                }
+                _ => (),
             }
         }
+        self.generate_error(String::from("unclosed block comment"));
     }
 
     /// Scan the slice of whitespace chars and discard them
     fn lex_space(&mut self) {
-        loop {
-            let peeked = self.peek();
-            if peeked.is_none() {
-                return self.lex_source();
-            }
-            if peeked.unwrap().is_whitespace() {
+        while let Some(c) = self.peek() {
+            if c.is_whitespace() {
                 self.next();
             } else {
                 break;
             }
         }
         self.jump();
-        self.lex_source()
+        self.lex_source();
     }
 
     /// Scan the slice that is supposed to be a numeral
@@ -333,12 +316,7 @@ impl<'a> Lexer<'a> {
 
     /// Scan the slice that is supposed to be an indentifier or a keyword
     fn lex_nondigit(&mut self) {
-        loop {
-            let peeked = self.peek();
-            if peeked.is_none() {
-                break;
-            }
-            let c = peeked.unwrap();
+        while let Some(c) = self.peek() {
             if !(c.is_ascii_alphanumeric() || c == '_') {
                 break;
             }
@@ -403,8 +381,7 @@ impl<'a> Lexer<'a> {
             "each" => self.generate_token(ModelicaToken::Each),
             "annotation" => self.generate_token(ModelicaToken::Annotation),
             "external" => self.generate_token(ModelicaToken::External),
-            "true" => self.generate_token(ModelicaToken::True),
-            "false" => self.generate_token(ModelicaToken::False),
+            "true" | "false"  => self.generate_token(ModelicaToken::Bool),
             _ => self.generate_token(ModelicaToken::Identifier),
         }
     }
@@ -416,41 +393,46 @@ mod tests {
 
     #[test]
     fn lexing_correct_input() {
-        let source = "within Some.Library;
+        let source = r#"within Some.Library;
         // Here goes a line comment!
         parameter Real x(start = 0) = if true then 1e-3 else -2
-          \"Some parameter\";
+          "Some parameter";
         /* End there goes
         a block comment! */
-        final constant Some.Type 'quoted'(min = 0, max = 1) = func.call(x);";
-        let tokens = lex(source);
+        final constant Some.Type 'quoted'(min = 0, max = 1) = func.call(x);"#;
+        let (tokens, errors)  = lex(source);
         assert_eq!(tokens.len(), 48);
-        assert_eq!(tokens.get_token(0).unwrap().text, "within");
-        assert_eq!(tokens.get_token(0).unwrap().typ, ModelicaToken::Within);
-        assert_eq!(tokens.get_token(0).unwrap().start.line, 1);
-        assert_eq!(tokens.get_token(1).unwrap().typ, ModelicaToken::Identifier);
-        assert_eq!(tokens.get_token(tokens.token_count() - 1).unwrap().text, ";");
-        assert_eq!(tokens.get_token(tokens.token_count() - 1).unwrap().typ, ModelicaToken::Semicolon);
-        assert_eq!(tokens.get_comment(0).unwrap().typ, ModelicaToken::LineComment);
-        assert_eq!(tokens.get_token(tokens.token_count() - 1).unwrap().start.line, 7);
-        assert_eq!(tokens.get_token(0).unwrap().start.col, 1);
-        assert_eq!(tokens.get_token(1).unwrap().start.col, 8);
-        assert_eq!(tokens.get_comment(0).unwrap().start.col, 9);
+        assert_eq!(tokens[0].text, "within");
+        assert_eq!(tokens[0].kind, ModelicaToken::Within);
+        assert_eq!(tokens[0].start.line, 1);
+        assert_eq!(tokens[1].kind, ModelicaToken::Identifier);
+        assert_eq!(tokens.last().unwrap().text, ";");
+        assert_eq!(tokens.last().unwrap().kind, ModelicaToken::Semicolon);
+        assert_eq!(tokens[5].kind, ModelicaToken::LineComment);
+        assert_eq!(tokens.last().unwrap().start.line, 7);
+        assert_eq!(tokens[0].start.col, 1);
+        assert_eq!(tokens[1].start.col, 8);
+        assert_eq!(tokens[5].start.col, 9);
+        assert_eq!(errors.len(), 0);
     }
 
     #[test]
     fn lexing_erroneus_input() {
         let source = "Some.Name x1y_ = ! \"string\";";
-        let tokens = lex(source);
-        assert_eq!(tokens.len(), 8);
-        assert_eq!(tokens.get_item(5).unwrap().typ, ModelicaToken::Error);
+        let (tokens, errors) = lex(source);
+        assert_eq!(tokens.len(), 7);
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].msg, "unexpected character: '!'");
+        assert_eq!(errors[0].line, 1);
+        assert_eq!(errors[0].col, 18);
     }
 
     #[test]
     fn lexing_unicode_string() {
         let source = "String s := \"stringą\";";
-        let tokens  = lex(source);
+        let (tokens, errors)  = lex(source);
+        assert_eq!(errors.len(), 0);
         assert_eq!(tokens.len(), 5);
-        assert_eq!(tokens.get_token(3).unwrap().text, "\"stringą\"");
+        assert_eq!(tokens[3].text, "\"stringą\"");
     }
 }
