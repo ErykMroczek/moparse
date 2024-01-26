@@ -4,12 +4,10 @@ use std::fmt::{Display, Formatter, Error};
 /// Represents a type of a Modelica token. Defined based on [Modelica
 /// Specification
 /// 3.6](https://specification.modelica.org/maint/3.6/modelica-concrete-syntax.html).
-pub enum TokenKind {
-    // Custom token type indicating the end of file
-    EOF,
+pub enum ModelicaToken {
     Comma,
     Dot,
-    Semi,
+    Semicolon,
     Colon,
     LParen,
     RParen,
@@ -42,10 +40,10 @@ pub enum TokenKind {
     For,
     If,
     Else,
-    Elif,
+    ElseIf,
     Then,
     When,
-    Elwhen,
+    ElseWhen,
     While,
     Loop,
     Break,
@@ -94,10 +92,10 @@ pub enum TokenKind {
     Connect,
     LineComment,
     BlockComment,
-    Ident,
+    Identifier,
     String,
-    Uint,
-    Ureal,
+    UInt,
+    UReal,
     True,
     False,
 }
@@ -133,7 +131,7 @@ pub struct Token {
     /// Text of the token
     pub text: String,
     /// Token's kind
-    pub kind: TokenKind,
+    pub kind: ModelicaToken,
     /// Position of staring character in the input
     pub start: Position,
     /// Positon of ending character in the input
@@ -142,6 +140,10 @@ pub struct Token {
 
 impl Display for Token {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
-        write!(f, "{}", self.text)
+        write!(f, "'{}'", self.text)
     }
+}
+
+impl Token {
+
 }

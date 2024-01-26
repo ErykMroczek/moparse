@@ -1,4 +1,4 @@
-use crate::tokens::{TokenKind, Position, TokenCollection};
+use crate::tokens::{ModelicaToken, Position, TokenCollection};
 use std::{iter::Peekable, str::CharIndices};
 
 
@@ -77,7 +77,7 @@ impl<'a> Lexer<'a> {
     }
 
     /// Add a new token to the collection
-    fn generate_token(&mut self, typ: TokenKind) {
+    fn generate_token(&mut self, typ: ModelicaToken) {
         let start = self.start;
         let end = self.current;
         self.tokens.push(String::from(&self.source[self.start.pos..self.current.pos]), typ, start, end);
@@ -88,7 +88,7 @@ impl<'a> Lexer<'a> {
     fn generate_error(&mut self, msg: String) {
         let start = self.start;
         let end = self.current;
-        self.tokens.push(msg, TokenKind::Error, start, end);
+        self.tokens.push(msg, ModelicaToken::Error, start, end);
         self.jump();
     }
 
@@ -123,18 +123,18 @@ impl<'a> Lexer<'a> {
         }
         let c = next.unwrap();
         match c {
-            ';' => self.generate_token(TokenKind::Semi),
-            ',' => self.generate_token(TokenKind::Comma),
-            '+' => self.generate_token(TokenKind::Plus),
-            '-' => self.generate_token(TokenKind::Minus),
-            '*' => self.generate_token(TokenKind::Star),
-            '^' => self.generate_token(TokenKind::Flex),
-            '(' => self.generate_token(TokenKind::LParen),
-            '{' => self.generate_token(TokenKind::LCurly),
-            '[' => self.generate_token(TokenKind::LBracket),
-            ')' => self.generate_token(TokenKind::RParen),
-            '}' => self.generate_token(TokenKind::RCurly),
-            ']' => self.generate_token(TokenKind::RBracket),
+            ';' => self.generate_token(ModelicaToken::Semicolon),
+            ',' => self.generate_token(ModelicaToken::Comma),
+            '+' => self.generate_token(ModelicaToken::Plus),
+            '-' => self.generate_token(ModelicaToken::Minus),
+            '*' => self.generate_token(ModelicaToken::Star),
+            '^' => self.generate_token(ModelicaToken::Flex),
+            '(' => self.generate_token(ModelicaToken::LParen),
+            '{' => self.generate_token(ModelicaToken::LCurly),
+            '[' => self.generate_token(ModelicaToken::LBracket),
+            ')' => self.generate_token(ModelicaToken::RParen),
+            '}' => self.generate_token(ModelicaToken::RCurly),
+            ']' => self.generate_token(ModelicaToken::RBracket),
             ':' => self.lex_colon(),
             '=' => self.lex_equal(),
             '<' => self.lex_lesser(),
@@ -159,52 +159,52 @@ impl<'a> Lexer<'a> {
     /// Scan the slice that starts with `:`
     fn lex_colon(&mut self) {
         if self.accept("=") {
-            return self.generate_token(TokenKind::Assign);
+            return self.generate_token(ModelicaToken::Assign);
         }
-        self.generate_token(TokenKind::Colon)
+        self.generate_token(ModelicaToken::Colon)
     }
 
     /// Scan the slice that starts with `=`
     fn lex_equal(&mut self) {
         if self.accept("=") {
-            return self.generate_token(TokenKind::Eq);
+            return self.generate_token(ModelicaToken::Eq);
         }
-        self.generate_token(TokenKind::Equal)
+        self.generate_token(ModelicaToken::Equal)
     }
 
     /// Scan the slice that starts with `<`
     fn lex_lesser(&mut self) {
         if self.accept(">") {
-            self.generate_token(TokenKind::Neq)
+            self.generate_token(ModelicaToken::Neq)
         } else if self.accept("=") {
-            self.generate_token(TokenKind::Leq)
+            self.generate_token(ModelicaToken::Leq)
         } else {
-            self.generate_token(TokenKind::Les)
+            self.generate_token(ModelicaToken::Les)
         }
     }
 
     /// Scan the slice that starts with `>`
     fn lex_greater(&mut self) {
         if self.accept("=") {
-            return self.generate_token(TokenKind::Geq);
+            return self.generate_token(ModelicaToken::Geq);
         }
-        self.generate_token(TokenKind::Gre)
+        self.generate_token(ModelicaToken::Gre)
     }
 
     /// Scan the slice that starts with `.`
     fn lex_dot(&mut self) {
         if self.accept("+") {
-            self.generate_token(TokenKind::DotPlus)
+            self.generate_token(ModelicaToken::DotPlus)
         } else if self.accept("-") {
-            self.generate_token(TokenKind::DotMinus)
+            self.generate_token(ModelicaToken::DotMinus)
         } else if self.accept("*") {
-            self.generate_token(TokenKind::DotStar)
+            self.generate_token(ModelicaToken::DotStar)
         } else if self.accept("/") {
-            self.generate_token(TokenKind::DotSlash)
+            self.generate_token(ModelicaToken::DotSlash)
         } else if self.accept("^") {
-            self.generate_token(TokenKind::DotFlex)
+            self.generate_token(ModelicaToken::DotFlex)
         } else {
-            self.generate_token(TokenKind::Dot)
+            self.generate_token(ModelicaToken::Dot)
         }
     }
 
@@ -216,7 +216,7 @@ impl<'a> Lexer<'a> {
                     match c {
                         // Skip the escaped character
                         '\\' => self.next(),
-                        '"' => return self.generate_token(TokenKind::String),
+                        '"' => return self.generate_token(ModelicaToken::String),
                         _ => continue,
                     }
                 }
@@ -232,7 +232,7 @@ impl<'a> Lexer<'a> {
             match self.next() {
                 Some(c) => match c {
                     '\\' => self.next(),
-                    '\'' => return self.generate_token(TokenKind::Ident),
+                    '\'' => return self.generate_token(ModelicaToken::Identifier),
                     _ => {
                         if !(c.is_ascii_alphanumeric() || c == '_' || ALLOWED.contains(c)) {
                             return self.generate_error(format!(
@@ -252,12 +252,12 @@ impl<'a> Lexer<'a> {
     fn lex_slash(&mut self) {
         let peeked = self.peek();
         if peeked.is_none() {
-            return self.generate_token(TokenKind::Dot);
+            return self.generate_token(ModelicaToken::Dot);
         }
         match peeked.unwrap() {
             '/' => self.lex_linecomment(),
             '*' => self.lex_blockcomment(),
-            _ => self.generate_token(TokenKind::Slash),
+            _ => self.generate_token(ModelicaToken::Slash),
         }
     }
 
@@ -266,10 +266,10 @@ impl<'a> Lexer<'a> {
         loop {
             let next = self.peek();
             if next.is_none() {
-                return self.generate_token(TokenKind::LineComment);
+                return self.generate_token(ModelicaToken::LineComment);
             }
             match next.unwrap() {
-                '\r' | '\n' => return self.generate_token(TokenKind::LineComment),
+                '\r' | '\n' => return self.generate_token(ModelicaToken::LineComment),
                 _ => _ = self.next(),
             }
         }
@@ -288,7 +288,7 @@ impl<'a> Lexer<'a> {
                     return self.generate_error(String::from("unclosed block comment"));
                 }
                 if next.unwrap() == '/' {
-                    return self.generate_token(TokenKind::BlockComment);
+                    return self.generate_token(ModelicaToken::BlockComment);
                 }
             }
         }
@@ -317,18 +317,18 @@ impl<'a> Lexer<'a> {
         self.accept_seq(DIGITS);
         if !self.accept(".") {
             if !self.accept("eE") {
-                return self.generate_token(TokenKind::Uint);
+                return self.generate_token(ModelicaToken::UInt);
             }
             self.accept("+-");
             self.accept_seq(DIGITS);
-            return self.generate_token(TokenKind::Ureal);
+            return self.generate_token(ModelicaToken::UReal);
         }
         self.accept_seq(DIGITS);
         if self.accept("eE") {
             self.accept("+-");
             self.accept_seq(DIGITS);
         }
-        self.generate_token(TokenKind::Ureal)
+        self.generate_token(ModelicaToken::UReal)
     }
 
     /// Scan the slice that is supposed to be an indentifier or a keyword
@@ -346,66 +346,66 @@ impl<'a> Lexer<'a> {
         }
         let word: &str = &self.source[self.start.pos..self.current.pos];
         match word {
-            "not" => self.generate_token(TokenKind::Not),
-            "and" => self.generate_token(TokenKind::And),
-            "or" => self.generate_token(TokenKind::Or),
-            "in" => self.generate_token(TokenKind::In),
-            "for" => self.generate_token(TokenKind::For),
-            "if" => self.generate_token(TokenKind::If),
-            "else" => self.generate_token(TokenKind::Else),
-            "elseif" => self.generate_token(TokenKind::Elif),
-            "then" => self.generate_token(TokenKind::Then),
-            "when" => self.generate_token(TokenKind::When),
-            "elsewhen" => self.generate_token(TokenKind::Elwhen),
-            "while" => self.generate_token(TokenKind::While),
-            "loop" => self.generate_token(TokenKind::Loop),
-            "break" => self.generate_token(TokenKind::Break),
-            "return" => self.generate_token(TokenKind::Return),
-            "partial" => self.generate_token(TokenKind::Partial),
-            "class" => self.generate_token(TokenKind::Class),
-            "operator" => self.generate_token(TokenKind::Operator),
-            "expandable" => self.generate_token(TokenKind::Expandable),
-            "model" => self.generate_token(TokenKind::Model),
-            "function" => self.generate_token(TokenKind::Function),
-            "record" => self.generate_token(TokenKind::Record),
-            "type" => self.generate_token(TokenKind::Type),
-            "block" => self.generate_token(TokenKind::Block),
-            "connector" => self.generate_token(TokenKind::Connector),
-            "package" => self.generate_token(TokenKind::Package),
-            "pure" => self.generate_token(TokenKind::Pure),
-            "impure" => self.generate_token(TokenKind::Impure),
-            "end" => self.generate_token(TokenKind::End),
-            "der" => self.generate_token(TokenKind::Der),
-            "connect" => self.generate_token(TokenKind::Connect),
-            "initial" => self.generate_token(TokenKind::Initial),
-            "equation" => self.generate_token(TokenKind::Equation),
-            "algorithm" => self.generate_token(TokenKind::Algorithm),
-            "extends" => self.generate_token(TokenKind::Extends),
-            "import" => self.generate_token(TokenKind::Import),
-            "public" => self.generate_token(TokenKind::Public),
-            "protected" => self.generate_token(TokenKind::Protected),
-            "within" => self.generate_token(TokenKind::Within),
-            "final" => self.generate_token(TokenKind::Final),
-            "encapsulated" => self.generate_token(TokenKind::Encapsulated),
-            "enumeration" => self.generate_token(TokenKind::Enumeration),
-            "input" => self.generate_token(TokenKind::Input),
-            "output" => self.generate_token(TokenKind::Output),
-            "redeclare" => self.generate_token(TokenKind::Redeclare),
-            "inner" => self.generate_token(TokenKind::Inner),
-            "outer" => self.generate_token(TokenKind::Outer),
-            "replaceable" => self.generate_token(TokenKind::Replaceable),
-            "constrainedby" => self.generate_token(TokenKind::Constrainedby),
-            "flow" => self.generate_token(TokenKind::Flow),
-            "stream" => self.generate_token(TokenKind::Stream),
-            "discrete" => self.generate_token(TokenKind::Discrete),
-            "parameter" => self.generate_token(TokenKind::Parameter),
-            "constant" => self.generate_token(TokenKind::Constant),
-            "each" => self.generate_token(TokenKind::Each),
-            "annotation" => self.generate_token(TokenKind::Annotation),
-            "external" => self.generate_token(TokenKind::External),
-            "true" => self.generate_token(TokenKind::True),
-            "false" => self.generate_token(TokenKind::False),
-            _ => self.generate_token(TokenKind::Ident),
+            "not" => self.generate_token(ModelicaToken::Not),
+            "and" => self.generate_token(ModelicaToken::And),
+            "or" => self.generate_token(ModelicaToken::Or),
+            "in" => self.generate_token(ModelicaToken::In),
+            "for" => self.generate_token(ModelicaToken::For),
+            "if" => self.generate_token(ModelicaToken::If),
+            "else" => self.generate_token(ModelicaToken::Else),
+            "elseif" => self.generate_token(ModelicaToken::ElseIf),
+            "then" => self.generate_token(ModelicaToken::Then),
+            "when" => self.generate_token(ModelicaToken::When),
+            "elsewhen" => self.generate_token(ModelicaToken::ElseWhen),
+            "while" => self.generate_token(ModelicaToken::While),
+            "loop" => self.generate_token(ModelicaToken::Loop),
+            "break" => self.generate_token(ModelicaToken::Break),
+            "return" => self.generate_token(ModelicaToken::Return),
+            "partial" => self.generate_token(ModelicaToken::Partial),
+            "class" => self.generate_token(ModelicaToken::Class),
+            "operator" => self.generate_token(ModelicaToken::Operator),
+            "expandable" => self.generate_token(ModelicaToken::Expandable),
+            "model" => self.generate_token(ModelicaToken::Model),
+            "function" => self.generate_token(ModelicaToken::Function),
+            "record" => self.generate_token(ModelicaToken::Record),
+            "type" => self.generate_token(ModelicaToken::Type),
+            "block" => self.generate_token(ModelicaToken::Block),
+            "connector" => self.generate_token(ModelicaToken::Connector),
+            "package" => self.generate_token(ModelicaToken::Package),
+            "pure" => self.generate_token(ModelicaToken::Pure),
+            "impure" => self.generate_token(ModelicaToken::Impure),
+            "end" => self.generate_token(ModelicaToken::End),
+            "der" => self.generate_token(ModelicaToken::Der),
+            "connect" => self.generate_token(ModelicaToken::Connect),
+            "initial" => self.generate_token(ModelicaToken::Initial),
+            "equation" => self.generate_token(ModelicaToken::Equation),
+            "algorithm" => self.generate_token(ModelicaToken::Algorithm),
+            "extends" => self.generate_token(ModelicaToken::Extends),
+            "import" => self.generate_token(ModelicaToken::Import),
+            "public" => self.generate_token(ModelicaToken::Public),
+            "protected" => self.generate_token(ModelicaToken::Protected),
+            "within" => self.generate_token(ModelicaToken::Within),
+            "final" => self.generate_token(ModelicaToken::Final),
+            "encapsulated" => self.generate_token(ModelicaToken::Encapsulated),
+            "enumeration" => self.generate_token(ModelicaToken::Enumeration),
+            "input" => self.generate_token(ModelicaToken::Input),
+            "output" => self.generate_token(ModelicaToken::Output),
+            "redeclare" => self.generate_token(ModelicaToken::Redeclare),
+            "inner" => self.generate_token(ModelicaToken::Inner),
+            "outer" => self.generate_token(ModelicaToken::Outer),
+            "replaceable" => self.generate_token(ModelicaToken::Replaceable),
+            "constrainedby" => self.generate_token(ModelicaToken::Constrainedby),
+            "flow" => self.generate_token(ModelicaToken::Flow),
+            "stream" => self.generate_token(ModelicaToken::Stream),
+            "discrete" => self.generate_token(ModelicaToken::Discrete),
+            "parameter" => self.generate_token(ModelicaToken::Parameter),
+            "constant" => self.generate_token(ModelicaToken::Constant),
+            "each" => self.generate_token(ModelicaToken::Each),
+            "annotation" => self.generate_token(ModelicaToken::Annotation),
+            "external" => self.generate_token(ModelicaToken::External),
+            "true" => self.generate_token(ModelicaToken::True),
+            "false" => self.generate_token(ModelicaToken::False),
+            _ => self.generate_token(ModelicaToken::Identifier),
         }
     }
 }
@@ -426,12 +426,12 @@ mod tests {
         let tokens = lex(source);
         assert_eq!(tokens.len(), 48);
         assert_eq!(tokens.get_token(0).unwrap().text, "within");
-        assert_eq!(tokens.get_token(0).unwrap().typ, TokenKind::Within);
+        assert_eq!(tokens.get_token(0).unwrap().typ, ModelicaToken::Within);
         assert_eq!(tokens.get_token(0).unwrap().start.line, 1);
-        assert_eq!(tokens.get_token(1).unwrap().typ, TokenKind::Ident);
+        assert_eq!(tokens.get_token(1).unwrap().typ, ModelicaToken::Identifier);
         assert_eq!(tokens.get_token(tokens.token_count() - 1).unwrap().text, ";");
-        assert_eq!(tokens.get_token(tokens.token_count() - 1).unwrap().typ, TokenKind::Semi);
-        assert_eq!(tokens.get_comment(0).unwrap().typ, TokenKind::LineComment);
+        assert_eq!(tokens.get_token(tokens.token_count() - 1).unwrap().typ, ModelicaToken::Semicolon);
+        assert_eq!(tokens.get_comment(0).unwrap().typ, ModelicaToken::LineComment);
         assert_eq!(tokens.get_token(tokens.token_count() - 1).unwrap().start.line, 7);
         assert_eq!(tokens.get_token(0).unwrap().start.col, 1);
         assert_eq!(tokens.get_token(1).unwrap().start.col, 8);
@@ -443,7 +443,7 @@ mod tests {
         let source = "Some.Name x1y_ = ! \"string\";";
         let tokens = lex(source);
         assert_eq!(tokens.len(), 8);
-        assert_eq!(tokens.get_item(5).unwrap().typ, TokenKind::Error);
+        assert_eq!(tokens.get_item(5).unwrap().typ, ModelicaToken::Error);
     }
 
     #[test]
