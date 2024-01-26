@@ -1,6 +1,7 @@
 use crate::{errors::SyntaxError, tokens::{ModelicaToken, Token, Position}};
 use std::{iter::Peekable, str::CharIndices};
 
+/// Return collections of Modelica tokens and errors generated from the input.
 pub fn lex(source: &str) -> (Vec<Token>, Vec<SyntaxError>) {
     let mut lexer = Lexer::new(source);
     lexer.tokenize();
@@ -8,7 +9,7 @@ pub fn lex(source: &str) -> (Vec<Token>, Vec<SyntaxError>) {
 }
 
 /// Represents Modelica lexer/scanner.
-pub struct Lexer<'a> {
+struct Lexer<'a> {
     /// Source code
     source: &'a str,
     /// Iterator through source code characters
@@ -32,7 +33,7 @@ impl<'a> Lexer<'a> {
     /// source code
     ///
     /// * source - reference to the source string
-    pub fn new(source: &'a str) -> Self {
+    fn new(source: &'a str) -> Self {
         return Lexer {
             source,
             chars: source.char_indices().peekable(),
@@ -44,8 +45,8 @@ impl<'a> Lexer<'a> {
         };
     }
 
-    /// Return collection of Modelica tokens generated from the input.
-    pub fn tokenize(&mut self) {
+    /// Collect tokens
+    fn tokenize(&mut self) {
         while !self.at_eof {
             self.lex_source();
         }
@@ -87,7 +88,6 @@ impl<'a> Lexer<'a> {
     /// Add a new error to the collection
     fn generate_error(&mut self, msg: String) {
         let start = self.start;
-        let end = self.current;
         let error = SyntaxError::new(msg, start.line, start.col);
         self.errors.push(error);
         self.jump();
