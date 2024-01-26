@@ -124,7 +124,7 @@ pub struct Position {
 ///
 /// * `idx`: position in the token collection
 /// * `text`: text content of the token
-/// * `typ`: token's type
+/// * `kind`: token's kind
 /// * `start`: position of the first character
 /// * `end`: position of the last character
 pub struct Token {
@@ -132,8 +132,8 @@ pub struct Token {
     pub idx: usize,
     /// Text of the token
     pub text: String,
-    /// Token's type
-    pub typ: TokenKind,
+    /// Token's kind
+    pub kind: TokenKind,
     /// Position of staring character in the input
     pub start: Position,
     /// Positon of ending character in the input
