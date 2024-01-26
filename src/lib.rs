@@ -9,5 +9,5 @@ mod syntax;
 mod lexing;
 mod tokens;
 mod events;
-// mod parsing;
+mod parsing;
 mod errors;

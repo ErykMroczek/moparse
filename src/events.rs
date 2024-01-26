@@ -12,5 +12,5 @@ pub enum SyntaxEvent {
     /// Event indicating an end of some Modelica production.
     Exit,
     /// Event indicating a token.
-    Advance(usize),
+    Advance,
 }

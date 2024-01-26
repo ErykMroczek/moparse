@@ -5,6 +5,7 @@ use std::fmt::{Debug, Display, Error, Formatter};
 /// Specification
 /// 3.7]
 pub enum ModelicaToken {
+    EOF,
     Comma,
     Dot,
     Semicolon,
@@ -102,6 +103,7 @@ pub enum ModelicaToken {
 impl Debug for ModelicaToken {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         match self {
+            ModelicaToken::EOF => write!(f, "EOF"),
             ModelicaToken::Comma => write!(f, "','"),
             ModelicaToken::Dot => write!(f, "'.''"),
             ModelicaToken::Semicolon => write!(f, "';'"),
