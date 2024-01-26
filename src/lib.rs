@@ -11,3 +11,4 @@ mod lexing;
 mod tokens;
 mod events;
 mod parsing;
+mod errors;
