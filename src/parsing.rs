@@ -179,7 +179,7 @@ impl Parser {
     fn consume(&mut self, typ: ModelicaToken) -> bool {
         if self.check(typ) {
             self.advance();
-            true;
+            return true;
         }
         false
     }
@@ -1589,8 +1589,8 @@ mod tests {
         let (events, _) = get_events(SOURCE1, SyntaxKind::DescriptionString);
         assert_eq!(events.len(), 7);
         let source2: &str = &(String::from(SOURCE1)
-            + " annotation (Dialog(tab = \"General\", group = \'General\"))");
-        let (_, errors) = get_events(source2, SyntaxKind::DescriptionString);
+            + " annotation (Dialog(tab = \"General\", group = \"General\"))");
+        let (_, errors) = get_events(source2, SyntaxKind::Description);
         assert_eq!(errors.len(), 0);
     }
 }
