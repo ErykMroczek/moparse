@@ -140,7 +140,6 @@ impl Parser {
     /// * `m`: position of the corresponding enter event
     /// * `typ`: type of the production
     fn exit(&mut self, m: usize, typ: SyntaxKind) {
-        let mark = self.events.len();
         self.events[m] = SyntaxEvent::Enter(typ);
         self.events.push(SyntaxEvent::Exit);
     }
@@ -1500,7 +1499,7 @@ mod tests {
     use super::*;
 
     fn get_events(source: &str, start: SyntaxKind) -> (Vec<SyntaxEvent>, Vec<SyntaxError>) {
-        let (tokens, mut errors) = lex(source);
+        let (tokens, comments, mut errors) = lex(source);
         let mut parser = Parser::new(tokens);
         parser.parse(start);
         errors.append(&mut parser.errors);

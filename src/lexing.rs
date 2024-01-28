@@ -4,11 +4,11 @@ use crate::{
 };
 use std::{iter::Peekable, str::CharIndices};
 
-/// Return collections of Modelica tokens and errors generated from the input.
-pub fn lex(source: &str) -> (Vec<Token>, Vec<SyntaxError>) {
+/// Return collections of Modelica tokens, comments and errors generated from the input.
+pub fn lex(source: &str) -> (Vec<Token>, Vec<Token>, Vec<SyntaxError>) {
     let mut lexer = Lexer::new(source);
     lexer.tokenize();
-    (lexer.tokens, lexer.errors)
+    (lexer.tokens, lexer.comments, lexer.errors)
 }
 
 /// Represents Modelica lexer/scanner.
@@ -23,6 +23,8 @@ struct Lexer<'a> {
     current: Position,
     /// Tokens collected so far
     tokens: Vec<Token>,
+    /// Comments collected so far
+    comments: Vec<Token>,
     /// Errors collected so far
     errors: Vec<SyntaxError>,
     /// `true` if lexer reached the end of file
@@ -51,6 +53,7 @@ impl<'a> Lexer<'a> {
                 col: 1,
             },
             tokens: Vec::new(),
+            comments: Vec::new(),
             errors: Vec::new(),
             at_eof: false,
         };
@@ -98,7 +101,11 @@ impl<'a> Lexer<'a> {
             start,
             end,
         };
-        self.tokens.push(token);
+        if kind == ModelicaToken::LineComment || kind == ModelicaToken::BlockComment {
+            self.comments.push(token);
+        } else {
+            self.tokens.push(token);
+        }
         self.jump();
     }
 
@@ -417,26 +424,27 @@ mod tests {
         /* End there goes
         a block comment! */
         final constant Some.Type 'quoted'(min = 0, max = 1) = func.call(x);"#;
-        let (tokens, errors) = lex(source);
-        assert_eq!(tokens.len(), 48);
+        let (tokens, comments, errors) = lex(source);
+        assert_eq!(tokens.len(), 46);
+        assert_eq!(comments.len(), 2);
         assert_eq!(tokens[0].text, "within");
         assert_eq!(tokens[0].kind, ModelicaToken::Within);
         assert_eq!(tokens[0].start.line, 1);
         assert_eq!(tokens[1].kind, ModelicaToken::Identifier);
         assert_eq!(tokens.last().unwrap().text, ";");
         assert_eq!(tokens.last().unwrap().kind, ModelicaToken::Semicolon);
-        assert_eq!(tokens[5].kind, ModelicaToken::LineComment);
+        assert_eq!(comments[0].kind, ModelicaToken::LineComment);
         assert_eq!(tokens.last().unwrap().start.line, 7);
         assert_eq!(tokens[0].start.col, 1);
         assert_eq!(tokens[1].start.col, 8);
-        assert_eq!(tokens[5].start.col, 9);
+        assert_eq!(comments[0].start.col, 9);
         assert_eq!(errors.len(), 0);
     }
 
     #[test]
     fn lexing_erroneus_input() {
         let source = "Some.Name x1y_ = ! \"string\";";
-        let (tokens, errors) = lex(source);
+        let (tokens, _, errors) = lex(source);
         assert_eq!(tokens.len(), 7);
         assert_eq!(errors.len(), 1);
         assert_eq!(errors[0].msg, "unexpected character: '!'");
@@ -447,7 +455,7 @@ mod tests {
     #[test]
     fn lexing_unicode_string() {
         let source = "String s := \"stringą\";";
-        let (tokens, errors) = lex(source);
+        let (tokens, _, errors) = lex(source);
         assert_eq!(errors.len(), 0);
         assert_eq!(tokens.len(), 5);
         assert_eq!(tokens[3].text, "\"stringą\"");
