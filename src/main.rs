@@ -1,5 +1,4 @@
-use moparse::{parse, lex, SyntaxEvent, Terminal};
-use moparse::SyntaxKind;
+use moparse::{events, lex, SyntaxEvent, SyntaxKind};
 use std::fs;
 use std::env;
 
@@ -12,18 +11,19 @@ fn main() {
     let file_path = &args[1];
     let contents = fs::read_to_string(file_path)
         .expect("error reading a file");
-    let tokens = lex(&contents);
-    let events = parse(&tokens, SyntaxKind::StoredDefinition);
-    for event in events {
-        match event {
-            SyntaxEvent::Advance(t) => {
-                match t {
-                    Terminal::Token(i) => println!("{:?}", tokens.get_token(i).unwrap()),
-                    Terminal::Error { msg, tok} => println!("Error: '{}' ({:?})", msg, tokens.get_token(tok).unwrap()),
-                }
-            },
-            SyntaxEvent::Enter(p) => println!("Enter: {:?}", p.typ),
-            SyntaxEvent::Exit(p) => println!("Exit: {:?}", p.typ),
-        }
+    let (tokens, comments, mut errors) = lex(&contents);
+    let (events, mut p_errors) = events(&tokens, SyntaxKind::DerClassSpecifier);
+    errors.append(&mut p_errors);
+    if errors.len() > 0 {
+        let msg = errors.iter().map(|e| format!("{}:{}", file_path, e)).collect::<Vec<_>>().join("\n");
+        panic!("Syntax errors detected:\n{}", msg);
+        
     }
+    let mut tokens = tokens.into_iter();
+    let out = events.iter().map(|e| match e {
+        SyntaxEvent::Advance => format!("{:?}", tokens.next().unwrap()),
+        SyntaxEvent::Enter(p) => format!("{:?}", p),
+        SyntaxEvent::Exit => String::new(),
+    }).collect::<Vec<_>>().join("\n");
+    println!("{}", out);
 }

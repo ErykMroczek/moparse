@@ -1,22 +1,31 @@
+use std::cell::Cell;
+
 use crate::errors::SyntaxError;
 use crate::events::SyntaxEvent;
-use crate::lexing::lex;
 use crate::syntax::SyntaxKind;
 use crate::tokens::{ModelicaToken, Token};
 
+pub fn events(tokens: &Vec<Token>, start: SyntaxKind) -> (Vec<SyntaxEvent>, Vec<SyntaxError>) {
+    let mut parser = Parser::new(tokens);
+    parser.parse(start);
+    (parser.events, parser.errors)
+}
+
 /// Represents a Modelica parser
-struct Parser {
+struct Parser<'a> {
     /// Scanned tokens
-    tokens: Vec<Token>,
+    tokens: &'a Vec<Token>,
     /// Collected syntax events
     events: Vec<SyntaxEvent>,
     /// Collection of errors
     errors: Vec<SyntaxError>,
     /// Current position in the `TokenCollection`
     pos: usize,
+    /// Parser lifes
+    lifes: Cell<u32>,
 }
 
-impl Parser {
+impl<'a> Parser<'a> {
     fn parse(&mut self, start: SyntaxKind) {
         match start {
             SyntaxKind::StoredDefinition => stored_definition(self),
@@ -115,13 +124,14 @@ impl Parser {
     }
 
     /// Return a new parser instance
-    fn new(tokens: Vec<Token>) -> Self {
+    fn new(tokens: &'a Vec<Token>) -> Self {
         let cap = tokens.len();
         Parser {
             tokens,
             events: Vec::with_capacity(cap),
             errors: Vec::new(),
             pos: 0,
+            lifes: Cell::new(100),
         }
     }
 
@@ -149,6 +159,7 @@ impl Parser {
         assert!(!self.eof());
         self.events.push(SyntaxEvent::Advance);
         self.pos += 1;
+        self.lifes.set(100);
     }
 
     /// Return `true` if parser reached the end of file
@@ -158,9 +169,22 @@ impl Parser {
 
     /// Return type of the n-th token counting from the current one.
     fn nth(&self, n: usize) -> ModelicaToken {
+        if self.lifes.get() == 0 {
+            self.blowup();
+        }
+        self.lifes.set(self.lifes.get() - 1);
         self.tokens
             .get(self.pos + n)
             .map_or(ModelicaToken::EOF, |tok| tok.kind)
+    }
+
+    fn blowup(&self) {
+        let tok = if !self.eof() {
+            self.tokens.get(self.pos).unwrap()
+        } else {
+            self.tokens.last().unwrap()
+        }; 
+        panic!("Parser stuck at {}:{}", tok.start.line, tok.start.col);
     }
 
     /// Return `true` if current token matches the specified type
@@ -241,9 +265,6 @@ const CLASS_PREFS: [ModelicaToken; 13] = [
     ModelicaToken::Expandable,
 ];
 
-// Those functions implement syntax specification from
-// https://specification.modelica.org/maint/3.6/modelica-concrete-syntax.html
-
 // A.2.1 Stored Definition – Within
 
 fn stored_definition(p: &mut Parser) {
@@ -302,7 +323,7 @@ fn class_prefixes(p: &mut Parser) {
             p.consume(ModelicaToken::Operator);
             p.expect(ModelicaToken::Function);
         }
-        _ => p.error(format!(
+        _ => p.advance_with_error(format!(
             "unexpected token '{:?}' used as a class prefix",
             p.nth(0)
         )),
@@ -323,7 +344,7 @@ fn class_specifier(p: &mut Parser) {
             short_class_specifier(p);
         }
     } else {
-        p.error(format!(
+        p.advance_with_error(format!(
             "unexpected token '{:?}': doesn't match any type of class specifier",
             p.nth(0)
         ));
@@ -381,10 +402,10 @@ fn der_class_specifier(p: &mut Parser) {
     type_specifier(p);
     p.expect(ModelicaToken::Comma);
     p.expect(ModelicaToken::Identifier);
-    while !p.consume(ModelicaToken::RParen) && !p.eof() {
-        p.expect(ModelicaToken::Comma);
+    while p.consume(ModelicaToken::Comma) && !p.eof() {
         p.expect(ModelicaToken::Identifier);
     }
+    p.expect(ModelicaToken::RParen);
     description(p);
     p.exit(mark, SyntaxKind::DerClassSpecifier);
 }
@@ -400,8 +421,7 @@ fn base_prefix(p: &mut Parser) {
 fn enum_list(p: &mut Parser) {
     let mark = p.enter();
     enumeration_literal(p);
-    while !p.check(ModelicaToken::RParen) && !p.eof() {
-        p.expect(ModelicaToken::Comma);
+    while p.consume(ModelicaToken::Comma) && !p.eof() {
         enumeration_literal(p);
     }
     p.exit(mark, SyntaxKind::EnumList);
@@ -436,7 +456,7 @@ fn composition(p: &mut Parser) {
                 ModelicaToken::Algorithm => {
                     algorithm_section(p);
                 }
-                _ => p.error(format!("unexpected token '{:?}' following 'initial'. Expected 'equation' or 'algorithm'", p.nth(1))),
+                _ => p.advance_with_error(format!("unexpected token '{:?}' following 'initial'. Expected 'equation' or 'algorithm'", p.nth(1))),
             },
             ModelicaToken::Equation => {
                 equation_section(p);
@@ -444,7 +464,12 @@ fn composition(p: &mut Parser) {
             ModelicaToken::Algorithm => {
                 algorithm_section(p);
             }
-            _ => p.error(format!("unexpected token '{:?}' after element list inside composition. Expected 'protected', 'public', 'initial', 'equation', 'algorithm', 'external', 'annotation' or 'end'.", p.nth(0))),
+            _ => p.advance_with_error(
+                format!(
+                    "unexpected token '{:?}' after element list inside composition. Expected 'protected', 'public', 'initial', 'equation', 'algorithm', 'external', 'annotation' or 'end'.",
+                    p.nth(0)
+                )
+            ),
         }
     }
     if p.consume(ModelicaToken::External) {
@@ -1497,13 +1522,13 @@ fn annotation_clause(p: &mut Parser) {
 mod tests {
 
     use super::*;
+    use crate::lex;
 
     fn get_events(source: &str, start: SyntaxKind) -> (Vec<SyntaxEvent>, Vec<SyntaxError>) {
         let (tokens, comments, mut errors) = lex(source);
-        let mut parser = Parser::new(tokens);
-        parser.parse(start);
-        errors.append(&mut parser.errors);
-        (parser.events, errors)
+        let (events, mut parser_errors) = events(&tokens, start);
+        errors.append(&mut parser_errors);
+        (events, errors)
     }
 
     #[test]
