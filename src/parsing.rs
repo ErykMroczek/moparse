@@ -1271,6 +1271,9 @@ fn primary(p: &mut Parser) {
             p.advance();
             output_expression_list(p);
             p.expect(ModelicaToken::RParen);
+            if p.check(ModelicaToken::LBracket) {
+                array_subscripts(p);
+            }
         }
         ModelicaToken::LBracket => {
             p.advance();
