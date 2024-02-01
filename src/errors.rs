@@ -18,9 +18,9 @@ impl SyntaxError {
 
     pub fn new(msg: String, line: usize, col: usize) -> SyntaxError {
         SyntaxError {
-            msg: msg,
-            line: line,
-            col: col,
+            msg,
+            line,
+            col,
         }
     }
 }

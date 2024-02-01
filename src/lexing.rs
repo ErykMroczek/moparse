@@ -288,18 +288,14 @@ impl<'a> Lexer<'a> {
     /// Scan the slice that is supposed to be a block comment
     fn lex_blockcomment(&mut self) {
         while let Some(c) = self.next() {
-            match c {
-                '*' => {
-                    if let Some(c) = self.next() {
-                        match c {
-                            '/' => return self.generate_token(ModelicaToken::BlockComment),
-                            _ => (),
-                        }
-                    } else {
-                        return self.generate_error(String::from("unclosed block comment"));
+            if c == '*' {
+                if let Some(c) = self.next() {
+                    if c == '/' {
+                        return self.generate_token(ModelicaToken::BlockComment);
                     }
+                } else {
+                    return self.generate_error(String::from("unclosed block comment"));
                 }
-                _ => (),
             }
         }
         self.generate_error(String::from("unclosed block comment"));
