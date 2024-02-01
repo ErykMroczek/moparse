@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.3] - 2024-02-01
+
+Significant changes in API.
+
+### Changed
+
+- Syntax events do not contain any information, except for `Enter`
+  events that carry identifier of the Modelica production
+- only one function is exposed. `parse()` takes the string input and
+  returns the `ParsedModelica` object
+- errors are now represented with a dedicated type called `SyntaxError`
+
 ## [0.1.2] - 2024-01-26
 
 Minor ergonomic improvements to syntax events.
