@@ -1,29 +1,19 @@
 use crate::{SyntaxEvent, SyntaxKind, Token};
 
-pub fn build_tree(tokens: Vec<Token>, comments: Vec<Token>, events: Vec<SyntaxEvent>) -> Tree {
+pub fn build_tree(tokens: Vec<Token>, events: Vec<SyntaxEvent>) -> Tree {
     let mut stack = Vec::new();
     let mut tokens = tokens.into_iter();
-    let mut comments = comments.into_iter().peekable();
 
     for event in events {
         match event {
             SyntaxEvent::Enter(kind) => stack.push(Tree::new(kind)),
             SyntaxEvent::Exit => {
                 let tree = stack.pop().unwrap();
-                stack.last_mut().unwrap().children.push(Child::Tree(tree));
+                stack.last_mut().unwrap().push(Child::Tree(tree));
             }
             SyntaxEvent::Advance => {
                 let token = tokens.next().unwrap();
-                while let Some(comment) = comments.peek() {
-                    if comment.idx < token.idx {
-                        stack
-                            .last_mut()
-                            .unwrap()
-                            .comments
-                            .push(comments.next().unwrap());
-                    }
-                }
-                stack.last_mut().unwrap().children.push(Child::Token(token));
+                stack.last_mut().unwrap().push(Child::Token(token));
             }
         }
     }
@@ -32,12 +22,11 @@ pub fn build_tree(tokens: Vec<Token>, comments: Vec<Token>, events: Vec<SyntaxEv
 }
 
 pub struct Tree {
-    kind: SyntaxKind,
-    children: Vec<Child>,
-    comments: Vec<Token>,
+    pub kind: SyntaxKind,
+    pub children: Vec<Child>,
 }
 
-enum Child {
+pub enum Child {
     Token(Token),
     Tree(Tree),
 }
@@ -47,8 +36,15 @@ impl Tree {
         Tree {
             kind,
             children: Vec::new(),
-            comments: Vec::new(),
         }
+    }
+
+    pub fn push(&mut self, child: Child) {
+        self.children.push(child);
+    }
+
+    pub fn len(&self) -> usize {
+        self.children.len()
     }
 
     pub fn start(&self) -> Option<&Token> {
