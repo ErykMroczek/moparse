@@ -1,74 +1,49 @@
 use crate::{SyntaxEvent, SyntaxKind, Token};
 
-struct Tree {
+pub fn build_tree(tokens: Vec<Token>, comments: Vec<Token>, events: Vec<SyntaxEvent>) -> Tree {
+    let mut stack = Vec::new();
+    let mut tokens = tokens.into_iter();
+    let mut comments = comments.into_iter().peekable();
+
+    for event in events {
+        match event {
+            SyntaxEvent::Enter(kind) => stack.push(Tree::new(kind)),
+            SyntaxEvent::Exit => {
+                let tree = stack.pop().unwrap();
+                stack.last_mut().unwrap().children.push(Child::Tree(tree));
+            }
+            SyntaxEvent::Advance => {
+                let token = tokens.next().unwrap();
+                while let Some(comment) = comments.peek() {
+                    if comment.idx < token.idx {
+                        stack.last_mut().unwrap().comments.push(comments.next().unwrap());
+                    }
+                }
+                stack.last_mut().unwrap().children.push(Child::Token(token));
+            }
+        }
+    }
+
+    stack.pop().unwrap()
+}
+
+pub struct Tree {
     kind: SyntaxKind,
-    parent: Option<usize>,
     children: Vec<Child>,
-    start: Option<usize>,
-    end: Option<usize>,
-}
-
-enum Child {
-    Token(usize),
-    Tree(usize),
-}
-
-struct ParseTree {
-    nodes: Vec<Tree>,
-    tokens: Vec<Token>,
     comments: Vec<Token>,
 }
 
-impl ParseTree {
-    pub fn new(tokens: Vec<Token>, comments: Vec<Token>, mut events: Vec<SyntaxEvent>) -> Self {
-        let mut nodes = Vec::new();
-        let mut toks = tokens.iter().enumerate();
-        let mut stack = Vec::new();
+enum Child {
+    Token(Token),
+    Tree(Tree),
+}
 
-        assert!(matches!(events.pop(), Some(SyntaxEvent::Exit)));
-
-        for event in events {
-            match event {
-                SyntaxEvent::Enter(kind) => {
-                    if let Some(i) = stack.last() {
-                        let mark = nodes.len();
-                        let parent: &mut Tree = nodes.get_mut(*i).unwrap();
-                        parent.children.push(Child::Tree(mark));
-                    }
-                    stack.push(nodes.len());
-                    nodes.push(Tree {
-                        kind,
-                        parent: None,
-                        children: Vec::new(),
-                        start: None,
-                        end: None,
-                    });
-                }
-                SyntaxEvent::Exit => {
-                    let node = stack.pop().unwrap();
-                    let tree = nodes.get_mut(node).unwrap();
-                    tree.parent = if let Some(i) = stack.last() {
-                        Some(*i)
-                    } else {
-                        None
-                    };
-                }
-                SyntaxEvent::Advance => {
-                    let (idx, _) = toks.next().unwrap();
-                    let parent = nodes.get_mut(*stack.last().unwrap()).unwrap();
-                    parent.children.push(Child::Token(idx));
-                    if let None = parent.start {
-                        parent.start = Some(idx);
-                    }
-                    parent.end = Some(idx);
-                }
-            }
-        }
-
-        ParseTree {
-            nodes,
-            tokens,
-            comments,
+impl Tree {
+    pub fn new(kind: SyntaxKind) -> Self {
+        Tree {
+            kind,
+            children: Vec::new(),
+            comments: Vec::new(),
         }
     }
 }
