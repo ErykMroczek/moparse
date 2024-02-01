@@ -1528,7 +1528,7 @@ mod tests {
     use crate::lex;
 
     fn get_events(source: &str, start: SyntaxKind) -> (Vec<SyntaxEvent>, Vec<SyntaxError>) {
-        let (tokens, comments, mut errors) = lex(source);
+        let (tokens, _, mut errors) = lex(source);
         let (events, mut parser_errors) = events(&tokens, start);
         errors.append(&mut parser_errors);
         (events, errors)
