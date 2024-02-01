@@ -16,7 +16,11 @@ pub fn build_tree(tokens: Vec<Token>, comments: Vec<Token>, events: Vec<SyntaxEv
                 let token = tokens.next().unwrap();
                 while let Some(comment) = comments.peek() {
                     if comment.idx < token.idx {
-                        stack.last_mut().unwrap().comments.push(comments.next().unwrap());
+                        stack
+                            .last_mut()
+                            .unwrap()
+                            .comments
+                            .push(comments.next().unwrap());
                     }
                 }
                 stack.last_mut().unwrap().children.push(Child::Token(token));
@@ -44,6 +48,28 @@ impl Tree {
             kind,
             children: Vec::new(),
             comments: Vec::new(),
+        }
+    }
+
+    pub fn start(&self) -> Option<&Token> {
+        if let Some(child) = self.children.first() {
+            match child {
+                Child::Token(token) => Some(token),
+                Child::Tree(tree) => tree.start(),
+            }
+        } else {
+            None
+        }
+    }
+
+    pub fn end(&self) -> Option<&Token> {
+        if let Some(child) = self.children.last() {
+            match child {
+                Child::Token(token) => Some(token),
+                Child::Tree(tree) => tree.end(),
+            }
+        } else {
+            None
         }
     }
 }
