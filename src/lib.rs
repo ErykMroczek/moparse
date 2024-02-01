@@ -12,3 +12,4 @@ mod tokens;
 mod events;
 mod parsing;
 mod errors;
+mod tree;
