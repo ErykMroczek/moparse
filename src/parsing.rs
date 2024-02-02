@@ -1051,7 +1051,7 @@ fn while_statement(p: &mut Parser) {
     }
     p.expect(ModelicaToken::End);
     p.expect(ModelicaToken::While);
-    p.exit(mark, SyntaxKind::WhenStatement);
+    p.exit(mark, SyntaxKind::WhileStatement);
 }
 
 fn when_equation(p: &mut Parser) {
