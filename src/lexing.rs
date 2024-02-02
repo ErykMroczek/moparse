@@ -27,6 +27,8 @@ struct Lexer<'a> {
     comments: Vec<Token>,
     /// Errors collected so far
     errors: Vec<SyntaxError>,
+    /// Tokens count
+    count: usize,
     /// `true` if lexer reached the end of file
     at_eof: bool,
 }
@@ -56,6 +58,7 @@ impl<'a> Lexer<'a> {
             comments: Vec::new(),
             errors: Vec::new(),
             at_eof: false,
+            count: 0,
         };
     }
 
@@ -95,7 +98,7 @@ impl<'a> Lexer<'a> {
         let start = self.start;
         let end = self.current;
         let token = Token {
-            idx: self.tokens.len(),
+            idx: self.count,
             text: String::from(&self.source[start.pos..end.pos]),
             kind,
             start,
@@ -106,6 +109,7 @@ impl<'a> Lexer<'a> {
         } else {
             self.tokens.push(token);
         }
+        self.count += 1;
         self.jump();
     }
 
