@@ -183,7 +183,7 @@ impl<'a> Parser<'a> {
             self.tokens.get(self.pos).unwrap()
         } else {
             self.tokens.last().unwrap()
-        }; 
+        };
         panic!("Parser stuck at {}:{}", tok.start.line, tok.start.col);
     }
 
@@ -560,10 +560,12 @@ fn import_clause(p: &mut Parser) {
         name(p);
     } else {
         name(p);
-        if !p.consume(ModelicaToken::DotStar) && p.consume(ModelicaToken::Dot) {
-            p.expect(ModelicaToken::LCurly);
-            import_list(p);
-            p.expect(ModelicaToken::RCurly);
+        if !p.consume(ModelicaToken::DotStar) {
+            if p.consume(ModelicaToken::Dot) {
+                p.expect(ModelicaToken::LCurly);
+                import_list(p);
+                p.expect(ModelicaToken::RCurly);
+            }
         }
     }
     description(p);
@@ -1312,8 +1314,18 @@ fn type_specifier(p: &mut Parser) {
 fn name(p: &mut Parser) {
     let mark = p.enter();
     p.expect(ModelicaToken::Identifier);
-    while p.consume(ModelicaToken::Dot) && !p.eof() {
-        p.expect(ModelicaToken::Identifier);
+    while p.check(ModelicaToken::Dot) && !p.eof() {
+        if p.nth(1) == ModelicaToken::Identifier {
+            p.advance();
+            p.advance();
+        } else if p.nth(1) == ModelicaToken::LCurly {
+            break;
+        } else {
+            p.advance_with_error(format!(
+                "unexpected token '{:?}' after '.'. Expected identifier or '{{'",
+                p.nth(1)
+            ));
+        }
     }
     p.exit(mark, SyntaxKind::Name);
 }
@@ -1534,6 +1546,21 @@ mod tests {
         (events, errors)
     }
 
+    #[test]
+    fn parse_imports() {
+        let source: &str = "import Foo.Bar";
+        let (_, errors) = get_events(source, SyntaxKind::ImportClause);
+        assert_eq!(errors.len(), 0);
+        let source: &str = "import Foo = Bar.Baz";
+        let (_, errors) = get_events(source, SyntaxKind::ImportClause);
+        assert_eq!(errors.len(), 0);
+        let source: &str = "import Foo.*";
+        let (_, errors) = get_events(source, SyntaxKind::ImportClause);
+        assert_eq!(errors.len(), 0);
+        let source: &str = "import Foo.{Bar, Baz}";
+        let (_, errors) = get_events(source, SyntaxKind::ImportClause);
+        assert_eq!(errors.len(), 0);
+    }
     #[test]
     fn parse_expression() {
         let source: &str = "(-a) + 2 * foo(x ./ 2) ^ 3";
