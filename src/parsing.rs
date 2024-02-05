@@ -804,7 +804,7 @@ fn element_redeclaration(p: &mut Parser) {
     } else {
         component_clause1(p);
     }
-    p.exit(mark, SyntaxKind::ElementReplaceable);
+    p.exit(mark, SyntaxKind::ElementRedeclaration);
 }
 
 fn element_replaceable(p: &mut Parser) {
