@@ -560,12 +560,10 @@ fn import_clause(p: &mut Parser) {
         name(p);
     } else {
         name(p);
-        if !p.consume(ModelicaToken::DotStar) {
-            if p.consume(ModelicaToken::Dot) {
-                p.expect(ModelicaToken::LCurly);
-                import_list(p);
-                p.expect(ModelicaToken::RCurly);
-            }
+        if !p.consume(ModelicaToken::DotStar) && p.consume(ModelicaToken::Dot) {
+            p.expect(ModelicaToken::LCurly);
+            import_list(p);
+            p.expect(ModelicaToken::RCurly);
         }
     }
     description(p);
