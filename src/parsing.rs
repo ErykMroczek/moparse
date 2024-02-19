@@ -1466,8 +1466,9 @@ fn output_expression_list(p: &mut Parser) {
     // This production can only occur inside parentheses, so easiest way
     // is to check for right paren
     if !p.check(ModelicaToken::RParen) {
-        // At least one expression is there
-        expression(p);
+        if !p.check_any(&[ModelicaToken::RParen, ModelicaToken::Comma]) {
+            expression(p);
+        }
         while p.consume(ModelicaToken::Comma) && !p.eof() {
             if !p.check_any(&[ModelicaToken::RParen, ModelicaToken::Comma]) {
                 expression(p);
