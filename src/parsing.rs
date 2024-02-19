@@ -1631,6 +1631,21 @@ mod tests {
         assert_ne!(errors.len(), 0);
     }
     #[test]
+    fn parse_output_lists() {
+        let source = "(x, y, z)";
+        let (_, errors) = get_events(source, SyntaxKind::Primary);
+        assert_eq!(errors.len(), 0);
+        let source = "(, y, z)";
+        let (_, errors) = get_events(source, SyntaxKind::Primary);
+        assert_eq!(errors.len(), 0);
+        let source = "(, , z)";
+        let (_, errors) = get_events(source, SyntaxKind::Primary);
+        assert_eq!(errors.len(), 0);
+        let source = "(, , )";
+        let (_, errors) = get_events(source, SyntaxKind::Primary);
+        assert_eq!(errors.len(), 0);
+    }
+    #[test]
     fn parse_array_subscripts() {
         let source = "[i, i+1, :]";
         let (_, errors) = get_events(source, SyntaxKind::ArraySubscripts);
