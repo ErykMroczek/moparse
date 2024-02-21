@@ -1,18 +1,17 @@
-use crate::{
-    errors::SyntaxError,
-    tokens::{ModelicaToken, Position, Token},
-};
+use crate::tokens::{ModelicaToken, Position, Token};
 use std::{iter::Peekable, str::CharIndices};
 
 /// Return collections of Modelica tokens, comments and errors generated from the input.
-pub fn lex(source: &str) -> (Vec<Token>, Vec<Token>, Vec<SyntaxError>) {
-    let mut lexer = Lexer::new(source);
+pub fn lex(name: &str, source: &str) -> (Vec<Token>, Vec<Token>, Vec<String>) {
+    let mut lexer = Lexer::new(name, source);
     lexer.tokenize();
     (lexer.tokens, lexer.comments, lexer.errors)
 }
 
 /// Represents Modelica lexer/scanner.
 struct Lexer<'a> {
+    /// Source name
+    name: &'a str,
     /// Source code
     source: &'a str,
     /// Iterator through source code characters
@@ -26,7 +25,7 @@ struct Lexer<'a> {
     /// Comments collected so far
     comments: Vec<Token>,
     /// Errors collected so far
-    errors: Vec<SyntaxError>,
+    errors: Vec<String>,
     /// Tokens count
     count: usize,
     /// `true` if lexer reached the end of file
@@ -40,8 +39,9 @@ impl<'a> Lexer<'a> {
     /// source code
     ///
     /// * source - reference to the source string
-    fn new(source: &'a str) -> Self {
+    fn new(name: &'a str, source: &'a str) -> Self {
         return Lexer {
+            name,
             source,
             chars: source.char_indices().peekable(),
             start: Position {
@@ -116,7 +116,7 @@ impl<'a> Lexer<'a> {
     /// Add a new error to the collection
     fn generate_error(&mut self, msg: String) {
         let start = self.start;
-        let error = SyntaxError::new(msg, start.line, start.col);
+        let error = format!("{}:{}:{}: {}", self.name, start.line, start.col, msg);
         self.errors.push(error);
         self.jump();
     }
@@ -424,7 +424,7 @@ mod tests {
         /* End there goes
         a block comment! */
         final constant Some.Type 'quoted'(min = 0, max = 1) = func.call(x);"#;
-        let (tokens, comments, errors) = lex(source);
+        let (tokens, comments, errors) = lex("none", source);
         assert_eq!(tokens.len(), 46);
         assert_eq!(comments.len(), 2);
         assert_eq!(tokens[0].text, "within");
@@ -444,18 +444,16 @@ mod tests {
     #[test]
     fn lexing_erroneus_input() {
         let source = "Some.Name x1y_ = ! \"string\";";
-        let (tokens, _, errors) = lex(source);
+        let (tokens, _, errors) = lex("none", source);
         assert_eq!(tokens.len(), 7);
         assert_eq!(errors.len(), 1);
-        assert_eq!(errors[0].msg, "unexpected character: '!'");
-        assert_eq!(errors[0].line, 1);
-        assert_eq!(errors[0].col, 18);
+        assert_eq!(errors[0], "none:1:18: unexpected character: '!'");
     }
 
     #[test]
     fn lexing_unicode_string() {
         let source = "String s := \"stringą\";";
-        let (tokens, _, errors) = lex(source);
+        let (tokens, _, errors) = lex("none", source);
         assert_eq!(errors.len(), 0);
         assert_eq!(tokens.len(), 5);
         assert_eq!(tokens[3].text, "\"stringą\"");

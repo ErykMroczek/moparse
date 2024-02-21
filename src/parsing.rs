@@ -1,24 +1,29 @@
 use std::cell::Cell;
 
-use crate::errors::SyntaxError;
 use crate::events::SyntaxEvent;
 use crate::syntax::SyntaxKind;
 use crate::tokens::{ModelicaToken, Token};
 
-pub fn events(tokens: &Vec<Token>, start: SyntaxKind) -> (Vec<SyntaxEvent>, Vec<SyntaxError>) {
-    let mut parser = Parser::new(tokens);
+pub fn events(
+    name: &str,
+    tokens: &Vec<Token>,
+    start: SyntaxKind,
+) -> (Vec<SyntaxEvent>, Vec<String>) {
+    let mut parser = Parser::new(name, tokens);
     parser.parse(start);
     (parser.events, parser.errors)
 }
 
 /// Represents a Modelica parser
 struct Parser<'a> {
+    /// Source name
+    name: &'a str,
     /// Scanned tokens
     tokens: &'a Vec<Token>,
     /// Collected syntax events
     events: Vec<SyntaxEvent>,
     /// Collection of errors
-    errors: Vec<SyntaxError>,
+    errors: Vec<String>,
     /// Current position in the `TokenCollection`
     pos: usize,
     /// Parser lifes
@@ -124,9 +129,10 @@ impl<'a> Parser<'a> {
     }
 
     /// Return a new parser instance
-    fn new(tokens: &'a Vec<Token>) -> Self {
+    fn new(name: &'a str, tokens: &'a Vec<Token>) -> Self {
         let cap = tokens.len();
         Parser {
+            name,
             tokens,
             events: Vec::with_capacity(cap),
             errors: Vec::new(),
@@ -184,7 +190,10 @@ impl<'a> Parser<'a> {
         } else {
             self.tokens.last().unwrap()
         };
-        panic!("Parser stuck at {}:{}", tok.start.line, tok.start.col);
+        panic!(
+            "{}:{}:{}: Parser stuck",
+            self.name, tok.start.line, tok.start.col
+        );
     }
 
     /// Return `true` if current token matches the specified type
@@ -210,13 +219,17 @@ impl<'a> Parser<'a> {
     /// Mark currently parsed token as erroneus.
     fn error(&mut self, msg: String) {
         if let Some(tok) = self.tokens.get(self.pos) {
-            self.errors
-                .push(SyntaxError::new(msg, tok.start.line, tok.start.col));
+            self.errors.push(format!(
+                "{}:{}:{}: {}",
+                self.name, tok.start.line, tok.start.col, msg
+            ));
         } else {
-            self.errors.push(SyntaxError::new(
-                msg,
+            self.errors.push(format!(
+                "{}:{}:{}: {}",
+                self.name,
                 self.tokens.last().unwrap().start.line,
                 self.tokens.last().unwrap().start.col,
+                msg
             ));
         }
     }
@@ -1537,9 +1550,9 @@ mod tests {
     use super::*;
     use crate::lex;
 
-    fn get_events(source: &str, start: SyntaxKind) -> (Vec<SyntaxEvent>, Vec<SyntaxError>) {
-        let (tokens, _, mut errors) = lex(source);
-        let (events, mut parser_errors) = events(&tokens, start);
+    fn get_events(source: &str, start: SyntaxKind) -> (Vec<SyntaxEvent>, Vec<String>) {
+        let (tokens, _, mut errors) = lex("none", source);
+        let (events, mut parser_errors) = events("none", &tokens, start);
         errors.append(&mut parser_errors);
         (events, errors)
     }
