@@ -1479,8 +1479,9 @@ fn output_expression_list(p: &mut Parser) {
     // This production can only occur inside parentheses, so easiest way
     // is to check for right paren
     if !p.check(ModelicaToken::RParen) {
-        // At least one expression is there
-        expression(p);
+        if !p.check_any(&[ModelicaToken::RParen, ModelicaToken::Comma]) {
+            expression(p);
+        }
         while p.consume(ModelicaToken::Comma) && !p.eof() {
             if !p.check_any(&[ModelicaToken::RParen, ModelicaToken::Comma]) {
                 expression(p);
@@ -1641,6 +1642,21 @@ mod tests {
         let source: &str = "(a = 2, 5, b = 3, c = x + y)";
         let (_, errors) = get_events(source, SyntaxKind::FunctionCallArgs);
         assert_ne!(errors.len(), 0);
+    }
+    #[test]
+    fn parse_output_lists() {
+        let source = "(x, y, z)";
+        let (_, errors) = get_events(source, SyntaxKind::Primary);
+        assert_eq!(errors.len(), 0);
+        let source = "(, y, z)";
+        let (_, errors) = get_events(source, SyntaxKind::Primary);
+        assert_eq!(errors.len(), 0);
+        let source = "(, , z)";
+        let (_, errors) = get_events(source, SyntaxKind::Primary);
+        assert_eq!(errors.len(), 0);
+        let source = "(, , )";
+        let (_, errors) = get_events(source, SyntaxKind::Primary);
+        assert_eq!(errors.len(), 0);
     }
     #[test]
     fn parse_array_subscripts() {
