@@ -1,5 +1,9 @@
 # *moparse* - Modelica language parser
 
+**This crate is no longer maintained. Parser was included directly into
+[mofmt](https://github.com/ErykMroczek/mofmt). Any further development will
+happen there**.
+
 *moparse* is a parser for the [Modelica](https://modelica.org/) language.
 
 I have created it to use it as a crate/library in my other tools like
